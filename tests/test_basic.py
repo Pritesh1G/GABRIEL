@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import json
 from pathlib import Path
@@ -1381,6 +1381,54 @@ def test_api_wrappers(tmp_path):
         )
     )
     assert len(custom) == 1
+
+
+def test_extract_custom_response_functions(tmp_path):
+    df = pd.DataFrame({"txt": ["hello"]})
+    seen: Dict[str, Any] = {}
+
+    async def custom_response_fn(prompt: str, **_kwargs: Any):
+        seen["response_fn"] = prompt
+        return ['{"hello": {"year": "2024"}}']
+
+    custom_response = asyncio.run(
+        gabriel.extract(
+            df,
+            "txt",
+            attributes={"year": ""},
+            save_dir=str(tmp_path / "extr-response"),
+            response_fn=custom_response_fn,
+        )
+    )
+    assert "hello" in seen["response_fn"]
+    assert custom_response.loc[0, "entity_name"] == "hello"
+    assert custom_response.loc[0, "year"] == "2024"
+
+    calls: List[Tuple[List[str], List[str]]] = []
+
+    async def custom_driver(prompts, identifiers, **_kwargs):
+        calls.append((prompts, identifiers))
+        return pd.DataFrame(
+            {
+                "Identifier": identifiers,
+                "Response": [['{"hello": {"year": "1999"}}'] for _ in identifiers],
+            }
+        )
+
+    custom_driver_response = asyncio.run(
+        gabriel.extract(
+            df,
+            "txt",
+            attributes={"year": ""},
+            save_dir=str(tmp_path / "extr-driver"),
+            get_all_responses_fn=custom_driver,
+        )
+    )
+    assert len(calls) == 1
+    assert calls[0][1] == ["aaf4c61d_batch0"]
+    assert "hello" in calls[0][0][0]
+    assert custom_driver_response.loc[0, "entity_name"] == "hello"
+    assert custom_driver_response.loc[0, "year"] == "1999"
 
 
 def test_whatever_dataframe_inputs(tmp_path, monkeypatch):
