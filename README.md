@@ -37,7 +37,7 @@ The tutorial notebook walks through these ideas step-by-step—from setting up a
 
 | Function | Purpose & Output Scale | Example Use |
 | --- | --- | --- |
-| `gabriel.rate` | Asks GPT to score each text / image / audio / item on natural language attributes. Output = 0--100 rating. | Measure “populist rhetoric” in a speech; “toxicity” of tweets; “luxury” in ad images. |
+| `gabriel.rate` | Asks GPT to score each text / image / audio / item on natural language attributes. Output = 0-100 rating. | Measure “populist rhetoric” in a speech; “toxicity” of tweets; “luxury” in ad images. |
 | `gabriel.rank` | Pairwise comparisons between texts yields ELO-like attribute ratings. Output = grounded, relative z scores for each text. | Rank technologies by “bulkiness” or artworks by “fine brushwork”. |
 | `gabriel.classify` | Classifies texts / images / audio / items on whether provided labels apply. Output = one or more classes per item. | Tag news articles, product photos, or interview clips into topical categories. |
 | `gabriel.extract` | Structured fact extraction on each item. Output = string / numeric values. | For each product, provide the “company”, “CEO”, and “year of invention”. |
@@ -85,8 +85,6 @@ export OPENAI_API_KEY="sk-..."
 # or os.environ['OPENAI_API_KEY'] = "sk-..." inside a Jupyter notebook
 ```
 
-Every task also accepts `use_dummy=True` for offline dry runs (the tutorial uses this to demonstrate workflows without making API calls).
-
 ## Quick start
 
 The tutorial notebook walks through many complete projects; here’s the minimal rating flow the notebook starts with. Paste this into Colab or a notebook cell so you can use `await` directly:
@@ -121,7 +119,7 @@ rate_results = await gabriel.rate(
     attributes=attributes,
     save_dir=os.path.join(PATH, "toy_rate"),
     model="gpt-5-mini",
-    n_runs=2,
+    n_runs=1,
     modality="entity",
     reset_files=True,
 )
@@ -158,7 +156,7 @@ The tutorial notebook covers full projects end-to-end. The list below matches it
 
 ## Multimodal data and web search
 
-Set `modality` to `text`, `entity`, `image`, `audio`, or `web` on any measurement helper. Pair `gabriel.load` with folders of media to build the right DataFrame, and use `web_search=True` when GPT should gather context before rating or extracting. The tutorial’s county-level example shows how to chain web search → rating → mapping in one flow.
+Set `modality` to `text`, `entity`, `pdf`, `image`, `audio`, or `web` on any measurement helper. Pair `gabriel.load` with folders of media to build the right DataFrame, and use `web_search=True` when GPT should gather context before rating or extracting. The tutorial’s county-level example shows how to chain web search → rating → mapping in one flow.
 
 ## Custom prompts and model routing
 
