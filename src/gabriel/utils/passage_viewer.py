@@ -3,6 +3,7 @@ import colorsys
 import math
 import html
 import json
+import os
 import random
 import re
 import uuid
@@ -27,6 +28,9 @@ try:
     import matplotlib.pyplot as plt
 except Exception:  # pragma: no cover - optional dependency
     plt = None
+
+from .audio_utils import encode_audio
+from .media_utils import load_image_inputs
 
 
 def _generate_distinct_colors(n: int) -> List[str]:
@@ -984,6 +988,49 @@ _COLAB_STYLE = """
 .gabriel-codify-viewer .gabriel-text p {
     margin: 0 0 1em 0;
 }
+.gabriel-codify-viewer .gabriel-paraphrase {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.gabriel-codify-viewer .gabriel-paraphrase-label {
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.55);
+    margin-bottom: 6px;
+}
+.gabriel-codify-viewer .gabriel-paraphrase-body {
+    font-size: 15px;
+    line-height: 1.7;
+    color: rgba(245, 247, 250, 0.96);
+}
+.gabriel-codify-viewer .gabriel-paraphrase-body--emphasis {
+    font-weight: 600;
+}
+.gabriel-codify-viewer .gabriel-paraphrase-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+}
+.gabriel-codify-viewer .gabriel-media {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+}
+.gabriel-codify-viewer .gabriel-media--image img {
+    max-width: min(100%, 520px);
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+}
+.gabriel-codify-viewer .gabriel-media--audio audio {
+    width: min(480px, 100%);
+}
 .gabriel-codify-viewer .gabriel-snippet {
     position: relative;
     border-radius: 6px;
@@ -1051,6 +1098,19 @@ _COLAB_STYLE = """
     }
     .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-text {
         color: #1f2933;
+    }
+    .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-paraphrase-label {
+        color: rgba(15, 23, 42, 0.6);
+    }
+    .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-paraphrase-body {
+        color: #1f2933;
+    }
+    .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-paraphrase-divider {
+        background: rgba(15, 23, 42, 0.12);
+    }
+    .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-media {
+        background: rgba(15, 23, 42, 0.04);
+        border-color: rgba(15, 23, 42, 0.12);
     }
     .gabriel-codify-viewer:not(.gabriel-theme-dark) .gabriel-legend-item {
         background: rgba(15, 23, 42, 0.06);
@@ -1600,6 +1660,186 @@ def _format_header_value(value: Any) -> str:
     return str(value)
 
 
+_IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".tiff",
+    ".tif",
+    ".svg",
+}
+_AUDIO_EXTENSIONS = {
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".flac",
+    ".opus",
+}
+_IMAGE_MIME_MAP = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+    ".svg": "image/svg+xml",
+}
+
+
+def _looks_like_base64(text: str) -> bool:
+    if not text:
+        return False
+    cleaned = text.strip()
+    if len(cleaned) < 120:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9+/=\s]+", cleaned))
+
+
+def _resolve_paraphrase_columns(
+    df: pd.DataFrame,
+    column_name: str,
+) -> Optional[Tuple[str, str]]:
+    base = f"{column_name}_revised"
+    if base in df.columns:
+        return column_name, base
+    pattern = re.compile(rf"^{re.escape(base)}_(\d+)$")
+    matches: List[Tuple[int, str]] = []
+    for col in df.columns:
+        match = pattern.match(str(col))
+        if match:
+            try:
+                matches.append((int(match.group(1)), str(col)))
+            except ValueError:
+                continue
+    if matches:
+        matches.sort(key=lambda item: item[0])
+        return column_name, matches[0][1]
+    return None
+
+
+def _media_from_value(value: Any) -> Optional[Dict[str, str]]:
+    if _is_na(value):
+        return None
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            media = _media_from_value(item)
+            if media:
+                return media
+        return None
+    if isinstance(value, dict):
+        file_url = value.get("file_url") or value.get("url")
+        if isinstance(file_url, str) and file_url.strip():
+            return {"type": "audio", "src": file_url.strip()}
+        data = value.get("data")
+        if isinstance(data, str) and data.strip():
+            fmt = value.get("format") or "wav"
+            return {"type": "audio", "src": f"data:audio/{fmt};base64,{data}"}
+        return None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if lowered.startswith("data:image"):
+        return {"type": "image", "src": text}
+    if lowered.startswith("data:audio"):
+        return {"type": "audio", "src": text}
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        ext = os.path.splitext(lowered)[1]
+        if ext in _IMAGE_EXTENSIONS:
+            return {"type": "image", "src": text}
+        if ext in _AUDIO_EXTENSIONS:
+            return {"type": "audio", "src": text}
+        return None
+    ext = os.path.splitext(lowered)[1]
+    if os.path.exists(text):
+        if ext in _IMAGE_EXTENSIONS:
+            encoded = load_image_inputs(text)
+            if encoded:
+                mime = _IMAGE_MIME_MAP.get(ext, "image/png")
+                return {"type": "image", "src": f"data:{mime};base64,{encoded[0]}"}
+        if ext in _AUDIO_EXTENSIONS:
+            encoded_audio = encode_audio(text)
+            if encoded_audio and encoded_audio.get("data"):
+                fmt = encoded_audio.get("format") or ext.lstrip(".")
+                return {
+                    "type": "audio",
+                    "src": f"data:audio/{fmt};base64,{encoded_audio['data']}",
+                }
+        return None
+    if _looks_like_base64(text):
+        return {"type": "image", "src": f"data:image/png;base64,{text}"}
+    return None
+
+
+def _build_media_html(media: Dict[str, str]) -> str:
+    media_type = media.get("type")
+    src = media.get("src", "")
+    safe_src = html.escape(src, quote=True)
+    if media_type == "image":
+        return (
+            "<div class='gabriel-media gabriel-media--image'>"
+            f"<img src='{safe_src}' alt='Image input'/>"
+            "</div>"
+        )
+    if media_type == "audio":
+        return (
+            "<div class='gabriel-media gabriel-media--audio'>"
+            f"<audio controls src='{safe_src}'></audio>"
+            "</div>"
+        )
+    return ""
+
+
+def _build_paraphrase_html(paraphrased: str, original: str) -> str:
+    return (
+        "<div class='gabriel-paraphrase'>"
+        "<div class='gabriel-paraphrase-section'>"
+        "<div class='gabriel-paraphrase-label'>Paraphrased text</div>"
+        "<div class='gabriel-paraphrase-body gabriel-paraphrase-body--emphasis'>"
+        f"{paraphrased}</div>"
+        "</div>"
+        "<div class='gabriel-paraphrase-divider'></div>"
+        "<div class='gabriel-paraphrase-section'>"
+        "<div class='gabriel-paraphrase-label'>Original text</div>"
+        f"<div class='gabriel-paraphrase-body'>{original}</div>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _build_passage_body(
+    original_text: str,
+    revised_text: Optional[str],
+    snippet_map: Dict[str, List[str]],
+    category_colors: Dict[str, str],
+    category_labels: Dict[str, str],
+    media: Optional[Dict[str, str]] = None,
+) -> str:
+    if media:
+        original_html = _build_media_html(media)
+    else:
+        original_html = _build_highlighted_text(
+            original_text, snippet_map, category_colors, category_labels
+        )
+    if revised_text is None:
+        return original_html
+    revised_value = revised_text if revised_text is not None else ""
+    if revised_value and revised_value.strip():
+        paraphrased_html = html.escape(revised_value).replace("\n", "<br/>")
+    else:
+        paraphrased_html = "<div class='gabriel-empty'>No paraphrased text available.</div>"
+    return _build_paraphrase_html(paraphrased_html, original_html)
+
+
 def _build_highlighted_text(
     text: str,
     snippet_map: Dict[str, List[str]],
@@ -1921,6 +2161,7 @@ def _render_passage_viewer(
 
     df = _normalize_structured_dataframe(df, snippet_columns)
     normalized_headers = _normalize_header_columns(header_columns)
+    paraphrase_columns = _resolve_paraphrase_columns(df, column_name)
 
     numeric_bounds: Dict[str, List[Optional[float]]] = {
         spec.column: [None, None] for spec in numeric_specs
@@ -1959,8 +2200,16 @@ def _render_passage_viewer(
 
     passages: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
-        raw_text = row.get(column_name)
+        if paraphrase_columns:
+            original_column, revised_column = paraphrase_columns
+            raw_text = row.get(original_column)
+            raw_revised = row.get(revised_column)
+            revised_text = "" if _is_na(raw_revised) else str(raw_revised)
+        else:
+            raw_text = row.get(column_name)
+            revised_text = None
         text = "" if _is_na(raw_text) else str(raw_text)
+        media = _media_from_value(raw_text)
         snippet_map: Dict[str, List[str]] = {cat: [] for cat in category_names}
         bool_values: Dict[str, Optional[bool]] = {}
         numeric_values: Dict[str, Optional[float]] = {}
@@ -2021,6 +2270,8 @@ def _render_passage_viewer(
         passages.append(
             {
                 "text": text,
+                "revised": revised_text,
+                "media": media,
                 "snippets": snippet_map,
                 "header": header_rows,
                 "active": active_categories,
@@ -2079,8 +2330,13 @@ def _render_passage_viewer(
 
     render_entries: List[Dict[str, Any]] = []
     for idx, payload in enumerate(passages):
-        body_html = _build_highlighted_text(
-            payload["text"], payload["snippets"], category_colors, category_labels
+        body_html = _build_passage_body(
+            payload["text"],
+            payload.get("revised"),
+            payload["snippets"],
+            category_colors,
+            category_labels,
+            media=payload.get("media"),
         )
         header_html = _build_header_html(
             payload["header"], payload["active"]
