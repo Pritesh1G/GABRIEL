@@ -12,6 +12,12 @@ from pathlib import Path
 
 from ..core.prompt_template import PromptTemplate, resolve_template
 from ..utils.openai_utils import get_all_responses
+from ..utils import (
+    load_audio_inputs,
+    load_image_inputs,
+    load_pdf_inputs,
+    warn_if_modality_mismatch,
+)
 from ..utils.logging import announce_prompt_rendering
 
 # Import classifier utilities for recursive validation.  Importing from
@@ -50,6 +56,10 @@ class ParaphraseConfig:
     # augmentation.  ``None`` defers to downstream defaults while ``True`` and
     # ``False`` explicitly enable or disable the feature.
     web_search: Optional[bool] = None
+    # What kind of input is being paraphrased (text, image, audio, pdf, entity, web).
+    modality: str = "text"
+    # Web search context size when modality is ``web``.
+    search_context_size: str = "medium"
     # Maximum number of parallel requests that will be sent to the
     # underlying API.  Note that classification and paraphrasing share
     # this value for simplicity.
@@ -155,7 +165,9 @@ class Paraphrase:
         # Convert the target column into a list of strings.  We coerce
         # values to strings so that non-string columns (e.g. numbers) are
         # handled gracefully.
-        texts: List[str] = df_proc[column_name].astype(str).tolist()
+        values = df_proc[column_name].tolist()
+        texts: List[str] = [str(v) for v in values]
+        warn_if_modality_mismatch(values, self.cfg.modality, column_name=column_name)
         # Determine the base name for the revised column(s).
         base_col = self.cfg.revised_column_name or f"{column_name}_revised"
         # Determine how many paraphrases to produce per passage.  A value
@@ -190,19 +202,67 @@ class Paraphrase:
             prompts: List[str] = []
             identifiers: List[str] = []
             for idx, text in enumerate(texts):
+                prompt_text = (
+                    text
+                    if self.cfg.modality in {"text", "entity", "web"}
+                    else ""
+                )
                 for j in range(1, n + 1):
                     prompts.append(
-                        self.template.render(text=text, instructions=self.cfg.instructions)
+                        self.template.render(
+                            text=prompt_text,
+                            instructions=self.cfg.instructions,
+                            modality=self.cfg.modality,
+                            json_mode=self.cfg.json_mode,
+                        )
                     )
                     identifiers.append(f"row_{idx}_rev{j}")
             save_path = os.path.join(self.cfg.save_dir, self.cfg.file_name)
+            prompt_images: Optional[Dict[str, List[str]]] = None
+            prompt_audio: Optional[Dict[str, List[Dict[str, str]]]] = None
+            prompt_pdfs: Optional[Dict[str, List[Dict[str, str]]]] = None
+
+            if self.cfg.modality == "image":
+                tmp: Dict[str, List[str]] = {}
+                for idx, val in enumerate(values):
+                    imgs = load_image_inputs(val)
+                    if imgs:
+                        for j in range(1, n + 1):
+                            tmp[f"row_{idx}_rev{j}"] = imgs
+                prompt_images = tmp or None
+            elif self.cfg.modality == "audio":
+                tmp_a: Dict[str, List[Dict[str, str]]] = {}
+                for idx, val in enumerate(values):
+                    auds = load_audio_inputs(val)
+                    if auds:
+                        for j in range(1, n + 1):
+                            tmp_a[f"row_{idx}_rev{j}"] = auds
+                prompt_audio = tmp_a or None
+            elif self.cfg.modality == "pdf":
+                tmp_p: Dict[str, List[Dict[str, str]]] = {}
+                for idx, val in enumerate(values):
+                    pdfs = load_pdf_inputs(val)
+                    if pdfs:
+                        for j in range(1, n + 1):
+                            tmp_p[f"row_{idx}_rev{j}"] = pdfs
+                prompt_pdfs = tmp_p or None
+
+            web_search = (
+                self.cfg.web_search
+                if self.cfg.web_search is not None
+                else self.cfg.modality == "web"
+            )
+            kwargs.setdefault("web_search", web_search)
+            kwargs.setdefault("search_context_size", self.cfg.search_context_size)
             resp_df = await get_all_responses(
                 prompts=prompts,
                 identifiers=identifiers,
+                prompt_images=prompt_images,
+                prompt_audio=prompt_audio,
+                prompt_pdfs=prompt_pdfs,
                 save_path=save_path,
                 model=self.cfg.model,
                 json_mode=self.cfg.json_mode,
-                web_search=self.cfg.web_search,
                 n_parallels=self.cfg.n_parallels,
                 use_dummy=self.cfg.use_dummy,
                 reset_files=reset_files,
@@ -227,6 +287,7 @@ class Paraphrase:
             resp_map: Dict[Tuple[int, int], str] = {}
             await self._recursive_validate(
                 texts,
+                values,
                 resp_map,
                 approval_map,
                 reset_files=reset_files,
@@ -261,6 +322,7 @@ class Paraphrase:
     async def _recursive_validate(
         self,
         original_texts: List[str],
+        original_values: List[Any],
         resp_map: Dict[Tuple[int, int], str],
         approval_map: Dict[Tuple[int, int], bool],
         *,
@@ -358,13 +420,27 @@ class Paraphrase:
                 # exists for this key, use that paraphrase as the base
                 # for regeneration.  Otherwise, continue to use the
                 # original.
-                if round_number > 0 and self.cfg.use_modified_source and key in resp_map:
+                if (
+                    round_number > 0
+                    and self.cfg.use_modified_source
+                    and self.cfg.modality in {"text", "entity", "web"}
+                    and key in resp_map
+                ):
                     base_text = resp_map[key]
                 else:
-                    base_text = original_texts[row_idx]
+                    base_text = (
+                        original_texts[row_idx]
+                        if self.cfg.modality in {"text", "entity", "web"}
+                        else ""
+                    )
                 for cand_idx in range(candidates_per_key):
                     prompts.append(
-                        self.template.render(text=base_text, instructions=self.cfg.instructions)
+                        self.template.render(
+                            text=base_text,
+                            instructions=self.cfg.instructions,
+                            modality=self.cfg.modality,
+                            json_mode=self.cfg.json_mode,
+                        )
                     )
                     # Encode row, revision, round and candidate index in
                     # the identifier.  Revision numbers are stored one-
@@ -389,13 +465,60 @@ class Paraphrase:
                 self.cfg.save_dir,
                 f"{os.path.splitext(self.cfg.file_name)[0]}_round{round_number}.csv",
             )
+            prompt_images: Optional[Dict[str, List[str]]] = None
+            prompt_audio: Optional[Dict[str, List[Dict[str, str]]]] = None
+            prompt_pdfs: Optional[Dict[str, List[Dict[str, str]]]] = None
+
+            if self.cfg.modality == "image":
+                tmp: Dict[str, List[str]] = {}
+                for key in to_check:
+                    row_idx, rev_idx = key
+                    imgs = load_image_inputs(original_values[row_idx])
+                    if imgs:
+                        for cand_idx in range(candidates_per_key):
+                            tmp[
+                                f"row_{row_idx}_rev{rev_idx + 1}_round{round_number}_cand{cand_idx}"
+                            ] = imgs
+                prompt_images = tmp or None
+            elif self.cfg.modality == "audio":
+                tmp_a: Dict[str, List[Dict[str, str]]] = {}
+                for key in to_check:
+                    row_idx, rev_idx = key
+                    auds = load_audio_inputs(original_values[row_idx])
+                    if auds:
+                        for cand_idx in range(candidates_per_key):
+                            tmp_a[
+                                f"row_{row_idx}_rev{rev_idx + 1}_round{round_number}_cand{cand_idx}"
+                            ] = auds
+                prompt_audio = tmp_a or None
+            elif self.cfg.modality == "pdf":
+                tmp_p: Dict[str, List[Dict[str, str]]] = {}
+                for key in to_check:
+                    row_idx, rev_idx = key
+                    pdfs = load_pdf_inputs(original_values[row_idx])
+                    if pdfs:
+                        for cand_idx in range(candidates_per_key):
+                            tmp_p[
+                                f"row_{row_idx}_rev{rev_idx + 1}_round{round_number}_cand{cand_idx}"
+                            ] = pdfs
+                prompt_pdfs = tmp_p or None
+
+            web_search = (
+                self.cfg.web_search
+                if self.cfg.web_search is not None
+                else self.cfg.modality == "web"
+            )
             new_resp_df = await get_all_responses(
                 prompts=prompts,
                 identifiers=identifiers,
+                prompt_images=prompt_images,
+                prompt_audio=prompt_audio,
+                prompt_pdfs=prompt_pdfs,
                 save_path=tmp_save_path,
                 model=self.cfg.model,
                 json_mode=self.cfg.json_mode,
-                web_search=self.cfg.web_search,
+                web_search=web_search,
+                search_context_size=self.cfg.search_context_size,
                 n_parallels=self.cfg.n_parallels,
                 use_dummy=self.cfg.use_dummy,
                 reset_files=reset_files,
