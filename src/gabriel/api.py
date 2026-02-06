@@ -565,6 +565,7 @@ async def ideate(
     seed_deduplicate: bool = True,
     seed_config_updates: Optional[Dict[str, Any]] = None,
     seed_run_kwargs: Optional[Dict[str, Any]] = None,
+    deduplicate_run_kwargs: Optional[Dict[str, Any]] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -613,7 +614,7 @@ async def ideate(
     reset_files:
         Force regeneration of outputs in ``save_dir``.
     *_config_updates, *_run_kwargs:
-        Fine-grained overrides for nested Rate/Rank/Seed tasks.
+        Fine-grained overrides for nested Rate/Rank/Seed/Deduplicate tasks.
     seed_deduplicate:
         When ``True`` enable deduplication in the nested seed generation.
     template_path:
@@ -674,6 +675,7 @@ async def ideate(
     rank_run_kwargs = _with_callable_overrides(rank_run_kwargs)
     rate_run_kwargs = _with_callable_overrides(rate_run_kwargs)
     seed_run_kwargs = _with_callable_overrides(seed_run_kwargs)
+    deduplicate_run_kwargs = _with_callable_overrides(deduplicate_run_kwargs)
 
     ideator = Ideate(cfg, template_path=template_path)
     return await ideator.run(
@@ -691,6 +693,7 @@ async def ideate(
         use_seed_entities=use_seed_entities,
         seed_config_updates=seed_config_updates,
         seed_run_kwargs=seed_run_kwargs,
+        deduplicate_run_kwargs=deduplicate_run_kwargs,
     )
 
 
@@ -2178,10 +2181,14 @@ async def whatever(
         raise ValueError("Either prompts or df must be provided to `whatever`.")
 
     kwargs = dict(kwargs)
-    if response_fn is not None:
-        kwargs.setdefault("response_fn", response_fn)
-    if get_all_responses_fn is not None:
-        kwargs.setdefault("get_all_responses_fn", get_all_responses_fn)
+    if response_fn is None:
+        response_fn = kwargs.pop("response_fn", None)
+    else:
+        kwargs.pop("response_fn", None)
+    if get_all_responses_fn is None:
+        get_all_responses_fn = kwargs.pop("get_all_responses_fn", None)
+    else:
+        kwargs.pop("get_all_responses_fn", None)
 
     if web_search is None and "web_search" in kwargs:
         web_search = kwargs.pop("web_search")
