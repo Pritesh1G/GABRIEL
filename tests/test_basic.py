@@ -1582,6 +1582,73 @@ def test_paraphrase_api(tmp_path):
     assert "txt_revised_1" in df_multi.columns and "txt_revised_2" in df_multi.columns
 
 
+def test_paraphrase_modalities_forward_media(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_get_all_responses(*, prompts, identifiers, **kwargs):
+        captured["prompts"] = list(prompts)
+        captured["identifiers"] = list(identifiers)
+        captured["prompt_images"] = kwargs.get("prompt_images")
+        captured["prompt_audio"] = kwargs.get("prompt_audio")
+        captured["prompt_pdfs"] = kwargs.get("prompt_pdfs")
+        captured["web_search"] = kwargs.get("web_search")
+        captured["search_context_size"] = kwargs.get("search_context_size")
+        return pd.DataFrame({"Identifier": identifiers, "Response": prompts})
+
+    monkeypatch.setattr("gabriel.tasks.paraphrase.get_all_responses", fake_get_all_responses)
+
+    df_image = pd.DataFrame({"media": ["data:image/png;base64,xyz"]})
+    asyncio.run(
+        gabriel.paraphrase(
+            df_image,
+            "media",
+            instructions="caption it",
+            save_dir=str(tmp_path / "para_image"),
+            modality="image",
+        )
+    )
+    assert captured["prompt_images"]["row_0_rev1"] == ["data:image/png;base64,xyz"]
+
+    df_audio = pd.DataFrame({"media": [{"format": "mp3", "data": "abcd"}]})
+    asyncio.run(
+        gabriel.paraphrase(
+            df_audio,
+            "media",
+            instructions="summarize it",
+            save_dir=str(tmp_path / "para_audio"),
+            modality="audio",
+        )
+    )
+    assert captured["prompt_audio"]["row_0_rev1"][0]["format"] == "mp3"
+
+    df_pdf = pd.DataFrame({"media": ["data:application/pdf;base64,abcd"]})
+    asyncio.run(
+        gabriel.paraphrase(
+            df_pdf,
+            "media",
+            instructions="rewrite",
+            save_dir=str(tmp_path / "para_pdf"),
+            modality="pdf",
+        )
+    )
+    assert captured["prompt_pdfs"]["row_0_rev1"][0]["file_data"].startswith(
+        "data:application/pdf"
+    )
+
+    df_web = pd.DataFrame({"query": ["Mount Fuji"]})
+    asyncio.run(
+        gabriel.paraphrase(
+            df_web,
+            "query",
+            instructions="summarize",
+            save_dir=str(tmp_path / "para_web"),
+            modality="web",
+        )
+    )
+    assert captured["web_search"] is True
+    assert captured["search_context_size"] == "medium"
+
+
 def test_paraphrase_n_rounds_not_forwarded(monkeypatch, tmp_path):
     captured = {}
 
@@ -1607,7 +1674,16 @@ def test_paraphrase_n_rounds_not_forwarded(monkeypatch, tmp_path):
 
 
 def test_paraphrase_approval_column_recursive(monkeypatch, tmp_path):
-    async def fake_recursive_validate(self, original_texts, resp_map, approval_map, *, reset_files, max_rounds):
+    async def fake_recursive_validate(
+        self,
+        original_texts,
+        original_values,
+        resp_map,
+        approval_map,
+        *,
+        reset_files,
+        max_rounds,
+    ):
         for idx in range(len(original_texts)):
             resp_map[(idx, 0)] = f"approved {idx}"
             approval_map[(idx, 0)] = (idx % 2 == 0)

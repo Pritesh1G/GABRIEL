@@ -1133,6 +1133,8 @@ async def paraphrase(
     reset_files: bool = False,
     reasoning_effort: Optional[str] = None,
     reasoning_summary: Optional[str] = None,
+    modality: str = "text",
+    search_context_size: str = "medium",
     n_rounds: int = 1,
     recursive_validation: Optional[bool] = None,
     n_initial_candidates: int = 1,
@@ -1171,6 +1173,10 @@ async def paraphrase(
         Whether to request JSON responses.
     web_search:
         Enable web search augmentation when supported by the model.
+    modality:
+        Modality of inputs (text, image, audio, pdf, entity, web).
+    search_context_size:
+        Web search context size when ``modality="web"``.
     n_parallels:
         Maximum concurrent paraphrase calls.
     use_dummy:
@@ -1220,6 +1226,8 @@ async def paraphrase(
         use_dummy=use_dummy,
         reasoning_effort=reasoning_effort,
         reasoning_summary=reasoning_summary,
+        modality=modality,
+        search_context_size=search_context_size,
         n_rounds=n_rounds,
         recursive_validation=recursive_validation,
         n_initial_candidates=n_initial_candidates,
