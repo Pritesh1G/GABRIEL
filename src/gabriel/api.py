@@ -289,6 +289,8 @@ async def extract(
         column_name,
         reset_files=reset_files,
         types=types,
+        response_fn=response_fn,
+        get_all_responses_fn=get_all_responses_fn,
     )
 
 
