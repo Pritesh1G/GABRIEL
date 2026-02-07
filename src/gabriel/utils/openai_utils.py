@@ -1961,6 +1961,9 @@ async def get_response(
             )
             logger.error(f"[get_response] {message}")
             raise asyncio.TimeoutError(message) from exc
+        except (RateLimitError, APIConnectionError) as e:
+            logger.debug("[get_response] API call resulted in exception: %r", e)
+            raise
         except Exception as e:
             logger.error(
                 "[get_response] API call resulted in exception: %r", e, exc_info=True
@@ -2070,6 +2073,9 @@ async def get_response(
             )
             logger.error(f"[get_response] {message}")
             raise asyncio.TimeoutError(message) from exc
+        except (RateLimitError, APIConnectionError) as e:
+            logger.debug("[get_response] API call resulted in exception: %r", e)
+            raise
         except Exception as e:
             logger.error(
                 "[get_response] API call resulted in exception: %r", e, exc_info=True
