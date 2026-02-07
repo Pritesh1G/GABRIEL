@@ -4496,7 +4496,8 @@ async def get_all_responses(
         nonlocal first_connection_logged
         if not first_connection_logged:
             msg = (
-                "Encountered first connection error. Future connection errors will be silenced and tracked in periodic updates."
+                "Encountered first connection error. This may be due to network instability or bandwidth limitations. "
+                "Future connection errors will be silenced and tracked in periodic updates."
             )
             if message_verbose:
                 print(msg)
@@ -4988,12 +4989,12 @@ async def get_all_responses(
             and (now - last_concurrency_scale_up) >= error_window
         ):
             growth_headroom_limit = max(1, int(math.floor(ceiling_cap * 0.9)))
-            success_threshold = max(60, int(math.ceil(concurrency_cap * 1.5)))
+            success_threshold = max(60, int(math.ceil(concurrency_cap * 2.0)))
             if (
                 concurrency_cap < growth_headroom_limit
                 and successes_since_adjust >= success_threshold
             ):
-                increment = max(1, int(math.ceil(max(concurrency_cap * 0.05, 1))))
+                increment = max(1, int(math.ceil(max(concurrency_cap * 0.15, 2))))
                 new_cap = min(ceiling_cap, concurrency_cap + increment)
                 if new_cap != concurrency_cap:
                     old_cap = concurrency_cap
