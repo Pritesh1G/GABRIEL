@@ -42,10 +42,7 @@ class CodifyConfig:
     debug_print: bool = False
     use_dummy: bool = False
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
     modality: str = "text"
-    json_mode: bool = True
-    max_timeout: Optional[float] = None
     n_rounds: int = 2  # Total Codify passes including the initial run; set to 1 to skip completion sweeps
     completion_classifier_instructions: Optional[str] = None
     completion_max_rounds: InitVar[Optional[int]] = None
@@ -760,13 +757,11 @@ class Codify:
             n_parallels=self.cfg.n_parallels,
             save_path=os.path.join(self.cfg.save_dir, self._iteration_file_name(iteration)),
             reset_files=reset_files,
-            use_dummy=self.cfg.use_dummy,
-            json_mode=self.cfg.json_mode,
+            json_mode=True,
             model=self.cfg.model,
-            max_timeout=self.cfg.max_timeout,
+            use_dummy=self.cfg.use_dummy,
             print_example_prompt=True,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
             prompt_images=prompt_images or None,
             prompt_audio=prompt_audio or None,
             prompt_pdfs=prompt_pdfs or None,
@@ -878,7 +873,6 @@ class Codify:
             modality=self.cfg.modality,
             n_attributes_per_run=self.cfg.max_categories_per_call,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
         )
         classifier = Classify(classify_cfg)
 

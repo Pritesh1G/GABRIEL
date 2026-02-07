@@ -26,7 +26,6 @@ class WhateverConfig:
     web_search_filters: Optional[Dict[str, Any]] = None
     search_context_size: str = "medium"
     n_parallels: int = 650
-    use_dummy: bool = False
     reasoning_effort: Optional[str] = None
     reasoning_summary: Optional[str] = None
 
@@ -302,7 +301,6 @@ class Whatever:
             web_search_filters=global_filters,
             search_context_size=self.cfg.search_context_size,
             n_parallels=self.cfg.n_parallels,
-            use_dummy=self.cfg.use_dummy,
             reset_files=reset_files,
             reasoning_effort=self.cfg.reasoning_effort,
             reasoning_summary=self.cfg.reasoning_summary,

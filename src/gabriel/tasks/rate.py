@@ -39,13 +39,11 @@ class RateConfig:
     n_parallels: int = 650
     n_runs: int = 1
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     rating_scale: Optional[str] = None
     additional_instructions: Optional[str] = None
     modality: str = "text"
     n_attributes_per_run: int = 8
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
     search_context_size: str = "medium"
 
     def __post_init__(self) -> None:
@@ -271,11 +269,9 @@ class Rate:
             model=self.cfg.model,
             save_path=csv_path,
             use_dummy=self.cfg.use_dummy,
-            max_timeout=self.cfg.max_timeout,
             json_mode=self.cfg.modality != "audio",
             reset_files=reset_files,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
             **kwargs,
         )
 

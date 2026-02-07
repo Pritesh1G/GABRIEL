@@ -80,7 +80,6 @@ class IdeateConfig:
     use_dummy: bool = False
     web_search: bool = False
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
     use_seed_entities: bool = True
     seed_num_entities: Optional[int] = None
     seed_entities_per_generation: Optional[int] = None
@@ -305,7 +304,6 @@ class Ideate:
             reset_files=reset_files,
             use_dummy=self.cfg.use_dummy,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
             print_example_prompt=True,
         )
         kwargs.update(generation_kwargs)
@@ -357,7 +355,6 @@ class Ideate:
             use_dummy=self.cfg.use_dummy,
             deduplicate=self.cfg.seed_deduplicate,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
         )
         if self.cfg.seed_additional_instructions:
             cfg_kwargs["instructions"] = (
@@ -616,7 +613,6 @@ class Ideate:
             n_parallels=self.cfg.n_parallels,
             use_dummy=self.cfg.use_dummy,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
         )
         cfg_kwargs.update(config_updates)
         existing_instruction = cfg_kwargs.get("additional_instructions")
@@ -661,7 +657,6 @@ class Ideate:
             n_parallels=self.cfg.n_parallels,
             use_dummy=self.cfg.use_dummy,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
             recursive=recursive,
             recursive_fraction=self.cfg.recursive_fraction,
             recursive_min_remaining=self.cfg.recursive_min_remaining,

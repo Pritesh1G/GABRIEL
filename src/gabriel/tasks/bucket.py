@@ -30,7 +30,6 @@ class BucketConfig:
     model: str = "gpt-5-mini"
     n_parallels: int = 650
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     additional_instructions: Optional[str] = None
     differentiate: bool = False
     n_terms_per_prompt: int = 250
@@ -40,7 +39,6 @@ class BucketConfig:
     top_k_per_round: int = 1
     raw_term_definitions: bool = True
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.additional_instructions is not None:
@@ -247,11 +245,9 @@ class Bucket:
                 model=self.cfg.model,
                 save_path=os.path.join(self.cfg.save_dir, "bucket_generation.csv"),
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 json_mode=True,
                 reset_files=reset_files,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
                 **kwargs,
             )
             if not isinstance(gen_df, pd.DataFrame):
@@ -336,11 +332,9 @@ class Bucket:
                     self.cfg.save_dir, f"vote_reduce{round_idx}.csv"
                 ),
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 json_mode=True,
                 reset_files=reset_files,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
                 **kwargs,
             )
             vote_map = dict(zip(vote_df.Identifier, vote_df.Response))
@@ -385,11 +379,9 @@ class Bucket:
                     self.cfg.save_dir, f"vote_final{loop_idx}.csv"
                 ),
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 json_mode=True,
                 reset_files=reset_files,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
                 **kwargs,
             )
             vote_map = dict(zip(vote_df.Identifier, vote_df.Response))

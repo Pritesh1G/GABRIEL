@@ -261,7 +261,6 @@ class DebiasConfig:
     n_parallels: int = 650
     measurement_kwargs: Dict[str, Any] = field(default_factory=dict)
     removal_kwargs: Dict[str, Any] = field(default_factory=dict)
-    use_dummy: bool = False
     robust_regression: bool = True
     random_seed: int = 12345
     verbose: bool = True
@@ -612,7 +611,7 @@ class DebiasPipeline:
                 save_dir=save_dir,
                 model=kwargs.pop("model", default_model),
                 n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-                use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+                use_dummy=kwargs.pop("use_dummy", False),
                 **kwargs,
             )
             runner = Rate(cfg, template_path=template_path)
@@ -628,7 +627,7 @@ class DebiasPipeline:
                 save_dir=save_dir,
                 model=kwargs.pop("model", default_model),
                 n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-                use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+                use_dummy=kwargs.pop("use_dummy", False),
                 **kwargs,
             )
             runner = Classify(cfg, template_path=template_path)
@@ -644,7 +643,7 @@ class DebiasPipeline:
                 save_dir=save_dir,
                 model=kwargs.pop("model", default_model),
                 n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-                use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+                use_dummy=kwargs.pop("use_dummy", False),
                 **kwargs,
             )
             runner = Extract(cfg, template_path=template_path)
@@ -660,7 +659,7 @@ class DebiasPipeline:
                 save_dir=save_dir,
                 model=kwargs.pop("model", default_model),
                 n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-                use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+                use_dummy=kwargs.pop("use_dummy", False),
                 **kwargs,
             )
             runner = Rank(cfg, template_path=template_path)
@@ -794,7 +793,7 @@ class DebiasPipeline:
             save_dir=save_dir,
             model=kwargs.pop("model", self.cfg.model),
             n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-            use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+            use_dummy=kwargs.pop("use_dummy", False),
             **kwargs,
         )
         runner = Codify(cfg)
@@ -872,7 +871,7 @@ class DebiasPipeline:
             save_dir=save_dir,
             model=kwargs.pop("model", self.cfg.model),
             n_parallels=kwargs.pop("n_parallels", self.cfg.n_parallels),
-            use_dummy=kwargs.pop("use_dummy", self.cfg.use_dummy),
+            use_dummy=kwargs.pop("use_dummy", False),
             **kwargs,
         )
         runner = Paraphrase(cfg)
