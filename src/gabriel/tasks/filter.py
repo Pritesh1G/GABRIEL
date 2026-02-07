@@ -30,7 +30,6 @@ class FilterConfig:
     threshold: float = 0.5
     additional_instructions: Optional[str] = None
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     fix_json_with_llm: bool = False
     json_fix_timeout: Optional[float] = 60.0
 
@@ -113,7 +112,6 @@ class Filter:
                 model=self.cfg.model,
                 save_path=save_path,
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 json_mode=True,
                 reset_files=reset_files,
                 **kwargs,

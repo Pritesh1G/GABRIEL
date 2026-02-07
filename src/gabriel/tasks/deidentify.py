@@ -29,11 +29,9 @@ class DeidentifyConfig:
     save_dir: str = "deidentify"
     file_name: str = "deidentified.csv"
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     max_words_per_call: int = 7500
     additional_instructions: Optional[str] = None
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
     n_passes: int = 1
     use_existing_mappings_only: bool = False
 
@@ -269,10 +267,8 @@ class Deidentifier:
                         model=self.cfg.model,
                         save_path=str(save_path),
                         use_dummy=self.cfg.use_dummy,
-                        max_timeout=self.cfg.max_timeout,
                         json_mode=True,
                         reasoning_effort=self.cfg.reasoning_effort,
-                        reasoning_summary=self.cfg.reasoning_summary,
                         reset_files=reset_files,
                         **kwargs,
                     )

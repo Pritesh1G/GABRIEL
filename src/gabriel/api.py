@@ -81,11 +81,9 @@ async def rate(
     n_runs: int = 1,
     n_attributes_per_run: int = 8,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "ratings.csv",
     modality: str = "text",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     search_context_size: str = "medium",
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
@@ -125,16 +123,14 @@ async def rate(
     reset_files:
         When ``True`` existing outputs in ``save_dir`` are ignored and
         regenerated.
-    use_dummy:
-        If ``True`` use deterministic dummy responses for offline testing.
     file_name:
         Basename (without the automatic ``_raw_responses`` suffix) for saved
         artifacts.
     modality:
         One of ``"text"``, ``"entity"``, ``"web"``, ``"image"``, ``"audio"``, or ``"pdf"``
         to control how inputs are packaged into prompts.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI metadata that tunes reasoning depth and summary capture.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     search_context_size:
         Size hint forwarded to web-search capable models.
     template_path:
@@ -166,11 +162,9 @@ async def rate(
         n_parallels=n_parallels,
         n_runs=n_runs,
         n_attributes_per_run=n_attributes_per_run,
-        use_dummy=use_dummy,
         additional_instructions=additional_instructions,
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         search_context_size=search_context_size,
         **cfg_kwargs,
     )
@@ -194,11 +188,9 @@ async def extract(
     n_runs: int = 1,
     n_attributes_per_run: int = 8,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "extraction.csv",
     modality: str = "entity",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     types: Optional[Dict[str, Any]] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
@@ -235,16 +227,13 @@ async def extract(
         split into multiple prompts when this threshold is exceeded.
     reset_files:
         When ``True`` forces regeneration of outputs in ``save_dir``.
-    use_dummy:
-        If ``True`` return deterministic dummy outputs instead of real API
-        calls.
     file_name:
         CSV name used when saving extraction results.
     modality:
         Indicates whether the content is ``"entity"`` text or another modality
         supported by the templates.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI metadata for reasoning depth and summarisation.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     types:
         Optional mapping of attribute names to explicit Python types for
         stronger downstream typing.
@@ -277,11 +266,9 @@ async def extract(
         n_parallels=n_parallels,
         n_runs=n_runs,
         n_attributes_per_run=n_attributes_per_run,
-        use_dummy=use_dummy,
         additional_instructions=additional_instructions,
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         **cfg_kwargs,
     )
     return await Extract(cfg, template_path=template_path).run(
@@ -299,18 +286,15 @@ async def seed(
     *,
     save_dir: str,
     file_name: str = "seed_entities.csv",
-    model: str = "gpt-5.1",
+    model: str = "gpt-5.2",
     n_parallels: int = 650,
     num_entities: int = 1000,
     entities_per_generation: int = 50,
     entity_batch_frac: float = 0.25,
     existing_entities_cap: int = 100,
-    use_dummy: bool = False,
     deduplicate: bool = False,
     deduplicate_sample_seed: int = 42,
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
-    max_timeout: Optional[float] = None,
     template_path: Optional[str] = None,
     existing_entities: Optional[List[str]] = None,
     reset_files: bool = False,
@@ -345,8 +329,6 @@ async def seed(
         Fraction of generated entities to keep per batch before deduplication.
     existing_entities_cap:
         Maximum number of prior entities to consider when avoiding duplicates.
-    use_dummy:
-        If ``True`` emit deterministic dummy seeds for offline testing.
     deduplicate:
         When ``True`` over-generate and apply a shallow deduplication pass
         before returning results.
@@ -354,9 +336,7 @@ async def seed(
         Random seed used when sampling a deterministic subset after
         deduplication.
     reasoning_effort:
-        Optional OpenAI reasoning control.
-    max_timeout:
-        Optional timeout in seconds for each API call.
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     template_path:
         Optional Jinja2 template override for the seeding prompt.
     existing_entities:
@@ -393,12 +373,9 @@ async def seed(
         entities_per_generation=entities_per_generation,
         entity_batch_frac=entity_batch_frac,
         existing_entities_cap=existing_entities_cap,
-        use_dummy=use_dummy,
         deduplicate=deduplicate,
         deduplicate_sample_seed=deduplicate_sample_seed,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
-        max_timeout=max_timeout,
     )
     task = Seed(cfg, template_path=template_path)
     return await task.run(
@@ -426,11 +403,9 @@ async def classify(
     n_attributes_per_run: int = 8,
     min_frequency: float = 0.6,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "classify_responses.csv",
     modality: str = "text",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     search_context_size: str = "medium",
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
@@ -473,14 +448,12 @@ async def classify(
         Minimum label frequency required to keep a label during aggregation.
     reset_files:
         When ``True`` overwrite any existing outputs in ``save_dir``.
-    use_dummy:
-        If ``True`` return deterministic dummy outputs for offline testing.
     file_name:
         Basename for saved classification CSVs.
     modality:
         Indicates the content modality for prompt rendering.
     reasoning_effort:
-        Optional OpenAI reasoning control.
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     search_context_size:
         Context size hint forwarded to the Responses API.
     template_path:
@@ -514,10 +487,8 @@ async def classify(
         n_attributes_per_run=n_attributes_per_run,
         min_frequency=min_frequency,
         additional_instructions=additional_instructions or "",
-        use_dummy=use_dummy,
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         search_context_size=search_context_size,
         **cfg_kwargs,
     )
@@ -552,9 +523,7 @@ async def ideate(
     recursive_rate_first_round: bool = True,
     additional_instructions: Optional[str] = None,
     web_search: bool = False,
-    use_dummy: bool = False,
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     reset_files: bool = False,
     generation_kwargs: Optional[Dict[str, Any]] = None,
     rank_config_updates: Optional[Dict[str, Any]] = None,
@@ -607,10 +576,8 @@ async def ideate(
         Extra guidance injected into prompts for both generation and ranking.
     web_search:
         Enable web search augmentation for generation.
-    use_dummy:
-        When ``True`` perform deterministic offline runs.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     reset_files:
         Force regeneration of outputs in ``save_dir``.
     *_config_updates, *_run_kwargs:
@@ -654,9 +621,7 @@ async def ideate(
         recursive_rate_first_round=recursive_rate_first_round,
         additional_instructions=additional_instructions,
         web_search=web_search,
-        use_dummy=use_dummy,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         seed_deduplicate=seed_deduplicate,
     )
     if attributes is not None:
@@ -712,12 +677,10 @@ async def deidentify(
     mapping_column: Optional[str] = None,
     model: str = "gpt-5-mini",
     n_parallels: int = 650,
-    use_dummy: bool = False,
     file_name: str = "deidentified.csv",
     max_words_per_call: int = 7500,
     additional_instructions: Optional[str] = None,
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     n_passes: int = 1,
     use_existing_mappings_only: bool = False,
     template_path: Optional[str] = None,
@@ -748,16 +711,14 @@ async def deidentify(
         Model name used to perform the deidentification.
     n_parallels:
         Maximum concurrent requests.
-    use_dummy:
-        When ``True`` produce deterministic dummy replacements for testing.
     file_name:
         CSV filename used when persisting deidentified text.
     max_words_per_call:
         Chunk size control for long passages.
     additional_instructions:
         Extra guidance appended to the prompt.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     n_passes:
         Number of deidentification passes to run over each passage.
     use_existing_mappings_only:
@@ -789,11 +750,9 @@ async def deidentify(
         file_name=file_name,
         model=model,
         n_parallels=n_parallels,
-        use_dummy=use_dummy,
         max_words_per_call=max_words_per_call,
         additional_instructions=additional_instructions,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         n_passes=n_passes,
         use_existing_mappings_only=use_existing_mappings_only,
         **cfg_kwargs,
@@ -823,12 +782,10 @@ async def rank(
     learning_rate: float = 0.1,
     n_parallels: int = 650,
     n_attributes_per_run: int = 8,
-    use_dummy: bool = False,
     file_name: str = "rankings",
     reset_files: bool = False,
     modality: str = "text",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     template_path: Optional[str] = None,
     recursive: bool = False,
     recursive_fraction: float = 1.0 / 3.0,
@@ -879,16 +836,14 @@ async def rank(
     n_attributes_per_run:
         Maximum number of attributes to compare per prompt. Attributes are
         batched across prompts when this cap is exceeded.
-    use_dummy:
-        When ``True`` run deterministic offline ranking.
     file_name:
         Base filename for saved rankings (without extension).
     reset_files:
         Force regeneration of any existing outputs in ``save_dir``.
     modality:
         Content modality forwarded to the prompt.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     template_path:
         Path to a custom ranking prompt template.
     recursive_*:
@@ -935,13 +890,11 @@ async def rank(
         model=model,
         n_parallels=n_parallels,
         n_attributes_per_run=n_attributes_per_run,
-        use_dummy=use_dummy,
         save_dir=save_dir,
         file_name=file_name,
         additional_instructions=additional_instructions or "",
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         recursive=recursive,
         recursive_fraction=recursive_fraction,
         recursive_min_remaining=recursive_min_remaining,
@@ -1005,12 +958,8 @@ async def codify(
     file_name: str = "coding_results.csv",
     reset_files: bool = False,
     debug_print: bool = False,
-    use_dummy: bool = False,
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     modality: str = "text",
-    json_mode: bool = True,
-    max_timeout: Optional[float] = None,
     n_rounds: int = 2,
     completion_classifier_instructions: Optional[str] = None,
     template_path: Optional[str] = None,
@@ -1051,16 +1000,10 @@ async def codify(
         When ``True`` regenerate outputs even if files exist.
     debug_print:
         Enable verbose logging of prompts and responses.
-    use_dummy:
-        Use deterministic dummy outputs for testing.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     modality:
         Content modality hint (text, entity, etc.).
-    json_mode:
-        Request JSON-mode responses where supported.
-    max_timeout:
-        Optional per-call timeout.
     n_rounds:
         Number of completion passes to refine codes.
     completion_classifier_instructions:
@@ -1095,12 +1038,8 @@ async def codify(
         max_words_per_call=max_words_per_call,
         max_categories_per_call=max_categories_per_call,
         debug_print=debug_print,
-        use_dummy=use_dummy,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         modality=modality,
-        json_mode=json_mode,
-        max_timeout=max_timeout,
         n_rounds=n_rounds,
         completion_classifier_instructions=completion_classifier_instructions,
         **cfg_kwargs,
@@ -1136,7 +1075,6 @@ async def paraphrase(
     reasoning_effort: Optional[str] = None,
     search_context_size: str = "medium",
     file_name: str = "paraphrase_responses.csv",
-    use_dummy: bool = False,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -1182,13 +1120,11 @@ async def paraphrase(
     json_mode:
         Whether to request JSON responses.
     reasoning_effort:
-        Optional OpenAI reasoning control.
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     search_context_size:
         Web search context size when ``modality="web"``.
     file_name:
         CSV filename for saved paraphrases.
-    use_dummy:
-        Produce deterministic dummy paraphrases.
     template_path:
         Custom template path to override the default paraphrase prompt.
     response_fn:
@@ -1224,7 +1160,6 @@ async def paraphrase(
         modality=modality,
         n_parallels=n_parallels,
         search_context_size=search_context_size,
-        use_dummy=use_dummy,
         reasoning_effort=reasoning_effort,
         **cfg_kwargs,
     )
@@ -1249,11 +1184,9 @@ async def compare(
     n_parallels: int = 650,
     n_runs: int = 1,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "comparison_responses.csv",
     modality: str = "text",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -1285,14 +1218,12 @@ async def compare(
         Number of repeated comparisons to gather per pair.
     reset_files:
         When ``True`` regenerate results regardless of existing files.
-    use_dummy:
-        If ``True`` return deterministic dummy comparison outputs.
     file_name:
         CSV filename for saved comparison responses.
     modality:
         Content modality hint for prompt rendering.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     template_path:
         Custom template override for comparison prompts.
     response_fn:
@@ -1321,12 +1252,10 @@ async def compare(
         model=model,
         n_parallels=n_parallels,
         n_runs=n_runs,
-        use_dummy=use_dummy,
         differentiate=differentiate,
         additional_instructions=additional_instructions or "",
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         **cfg_kwargs,
     )
     return await Compare(cfg, template_path=template_path).run(
@@ -1348,12 +1277,10 @@ async def bucket(
     model: str = "gpt-5-mini",
     n_parallels: int = 650,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "bucket_definitions.csv",
     bucket_count: int = 10,
     differentiate: bool = False,
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -1381,16 +1308,14 @@ async def bucket(
         Maximum number of concurrent bucket definition calls.
     reset_files:
         When ``True`` regenerate outputs despite existing files.
-    use_dummy:
-        Return deterministic dummy buckets for offline testing.
     file_name:
         Filename for saved bucket definitions.
     bucket_count:
         Target number of buckets to generate.
     differentiate:
         Whether to encourage distinctive bucket descriptions.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     template_path:
         Custom template path for bucket prompts.
     response_fn:
@@ -1419,11 +1344,9 @@ async def bucket(
         file_name=file_name,
         model=model,
         n_parallels=n_parallels,
-        use_dummy=use_dummy,
         additional_instructions=additional_instructions,
         differentiate=differentiate,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         **cfg_kwargs,
     )
     return await Bucket(cfg, template_path=template_path).run(
@@ -1445,6 +1368,7 @@ async def discover(
     additional_instructions: Optional[str] = None,
     model: str = "gpt-5-mini",
     n_parallels: int = 650,
+    reset_files: bool = False,
     n_runs: int = 1,
     min_frequency: float = 0.6,
     bucket_count: int = 10,
@@ -1457,11 +1381,8 @@ async def discover(
     next_round_frac: float = 0.25,
     top_k_per_round: int = 1,
     raw_term_definitions: bool = True,
-    use_dummy: bool = False,
     modality: str = "text",
     reasoning_effort: Optional[str] = None,
-    reasoning_summary: Optional[str] = None,
-    reset_files: bool = False,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
     **cfg_kwargs,
@@ -1506,12 +1427,10 @@ async def discover(
         Controls for carrying top-performing terms into subsequent rounds.
     raw_term_definitions:
         Whether to keep raw label definitions in the outputs.
-    use_dummy:
-        If ``True`` perform deterministic offline discovery.
     modality:
         Content modality hint forwarded to downstream tasks.
-    reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+    reasoning_effort:
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     reset_files:
         When ``True`` regenerate all discovery artifacts.
     response_fn:
@@ -1554,10 +1473,8 @@ async def discover(
         next_round_frac=next_round_frac,
         top_k_per_round=top_k_per_round,
         raw_term_definitions=raw_term_definitions,
-        use_dummy=use_dummy,
         modality=modality,
         reasoning_effort=reasoning_effort,
-        reasoning_summary=reasoning_summary,
         **cfg_kwargs,
     )
     return await Discover(cfg).run(
@@ -1583,11 +1500,9 @@ async def deduplicate(
     n_parallels: int = 650,
     n_runs: int = 3,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "deduplicate_responses.csv",
     use_embeddings: bool = True,
     group_size: int = 500,
-    max_timeout: Optional[float] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -1621,16 +1536,12 @@ async def deduplicate(
         Number of passes to run; helps stabilise duplicate detection.
     reset_files:
         When ``True`` regenerate outputs regardless of existing files.
-    use_dummy:
-        Return deterministic dummy outputs for offline testing.
     file_name:
         CSV filename for saved deduplication responses.
     use_embeddings:
         Whether to use embedding-based prefiltering prior to model calls.
     group_size:
         Number of passages to evaluate per batch during deduplication.
-    max_timeout:
-        Optional timeout per API call.
     template_path:
         Custom template override for deduplication prompts.
     response_fn:
@@ -1661,8 +1572,6 @@ async def deduplicate(
         model=model,
         n_parallels=n_parallels,
         n_runs=n_runs,
-        use_dummy=use_dummy,
-        max_timeout=max_timeout,
         additional_instructions=additional_instructions,
         use_embeddings=use_embeddings,
         group_size=group_size,
@@ -1693,7 +1602,6 @@ async def merge(
     n_parallels: int = 650,
     n_runs: int = 1,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "merge_responses.csv",
     use_embeddings: bool = True,
     short_list_len: int = 16,
@@ -1736,8 +1644,6 @@ async def merge(
         Number of repeated comparisons per candidate.
     reset_files:
         When ``True`` regenerate outputs even if files exist.
-    use_dummy:
-        If ``True`` return deterministic dummy matches.
     file_name:
         CSV filename for saved merge responses.
     use_embeddings:
@@ -1783,7 +1689,6 @@ async def merge(
         model=model,
         n_parallels=n_parallels,
         n_runs=n_runs,
-        use_dummy=use_dummy,
         additional_instructions=additional_instructions,
         use_embeddings=use_embeddings,
         short_list_len=short_list_len,
@@ -1823,9 +1728,7 @@ async def filter(
     model: str = "gpt-5-nano",
     n_parallels: int = 650,
     reset_files: bool = False,
-    use_dummy: bool = False,
     file_name: str = "filter_responses.csv",
-    max_timeout: Optional[float] = None,
     template_path: Optional[str] = None,
     response_fn: Optional[Callable[..., Awaitable[Any]]] = None,
     get_all_responses_fn: Optional[Callable[..., Awaitable[pd.DataFrame]]] = None,
@@ -1865,12 +1768,8 @@ async def filter(
         Maximum number of concurrent filtering calls.
     reset_files:
         When ``True`` regenerate outputs even if files exist.
-    use_dummy:
-        Return deterministic dummy outputs instead of real API responses.
     file_name:
         CSV filename for saved filter responses.
-    max_timeout:
-        Optional per-call timeout.
     template_path:
         Custom prompt template path.
     response_fn:
@@ -1904,8 +1803,6 @@ async def filter(
         n_runs=n_runs,
         threshold=threshold,
         additional_instructions=additional_instructions or "",
-        use_dummy=use_dummy,
-        max_timeout=max_timeout,
         **cfg_kwargs,
     )
     return await Filter(cfg, template_path=template_path).run(
@@ -1939,7 +1836,6 @@ async def debias(
     remaining_signal: bool = True,
     max_words_per_call: Optional[int] = 1000,
     n_rounds: Optional[int] = 3,
-    use_dummy: bool = False,
     robust_regression: bool = True,
     random_seed: int = 12345,
     verbose: bool = True,
@@ -1997,8 +1893,6 @@ async def debias(
         configures the codify task's chunk size, while ``n_rounds`` controls the
         number of completion passes run by codify and any downstream
         paraphrasing steps. Defaults to 3 when not explicitly provided.
-    use_dummy:
-        If ``True`` run deterministic offline debiasing.
     robust_regression:
         Whether to use robust regression when estimating bias coefficients.
     random_seed:
@@ -2067,7 +1961,6 @@ async def debias(
         measurement_kwargs=measurement_kwargs,
         removal_kwargs=removal_kwargs,
         remaining_signal=remaining_signal,
-        use_dummy=use_dummy,
         robust_regression=robust_regression,
         random_seed=random_seed,
         verbose=verbose,
@@ -2096,7 +1989,6 @@ async def whatever(
     web_search_filters: Optional[Dict[str, Any]] = None,
     search_context_size: str = "medium",
     n_parallels: int = 650,
-    use_dummy: bool = False,
     reset_files: bool = False,
     return_original_columns: bool = True,
     drop_prompts: bool = True,
@@ -2145,8 +2037,6 @@ async def whatever(
         Context size hint for web-search capable models.
     n_parallels:
         Maximum concurrent response requests.
-    use_dummy:
-        If ``True`` return deterministic dummy responses.
     reset_files:
         When ``True`` regenerate outputs even if files already exist.
     return_original_columns:
@@ -2156,7 +2046,7 @@ async def whatever(
         When ``True`` and merging back onto ``df``, drop the prompt column
         before saving/returning the result.
     reasoning_effort, reasoning_summary:
-        Optional OpenAI reasoning controls.
+        Controls how intensely the model reasons (none/low/medium/high). Higher is smarter but slower.
     response_fn:
         Optional callable forwarded to :func:`gabriel.utils.openai_utils.get_all_responses`
         that replaces the per-prompt model invocation. Ignored when
@@ -2216,7 +2106,6 @@ async def whatever(
         web_search_filters=web_search_filters,
         search_context_size=search_context_size,
         n_parallels=n_parallels,
-        use_dummy=use_dummy,
         reasoning_effort=reasoning_effort,
         reasoning_summary=reasoning_summary,
     )

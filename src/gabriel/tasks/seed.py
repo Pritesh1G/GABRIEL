@@ -34,9 +34,7 @@ class SeedConfig:
     use_dummy: bool = False
     deduplicate: bool = False
     deduplicate_sample_seed: int = 42
-    max_timeout: Optional[float] = None
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
 
 
 class Seed:
@@ -282,9 +280,7 @@ class Seed:
         kwargs.setdefault("model", self.cfg.model)
         kwargs.setdefault("n_parallels", self.cfg.n_parallels)
         kwargs.setdefault("use_dummy", self.cfg.use_dummy)
-        kwargs.setdefault("max_timeout", self.cfg.max_timeout)
         kwargs.setdefault("reasoning_effort", self.cfg.reasoning_effort)
-        kwargs.setdefault("reasoning_summary", self.cfg.reasoning_summary)
         kwargs.setdefault("json_mode", True)
         kwargs.setdefault("save_path", raw_save)
         kwargs.setdefault("reset_files", reset_files)
@@ -412,7 +408,6 @@ class Seed:
             n_parallels=self.cfg.n_parallels,
             n_runs=4,
             use_dummy=self.cfg.use_dummy,
-            max_timeout=self.cfg.max_timeout,
             group_size=100,
         )
         dedup = Deduplicate(dedup_cfg)
@@ -443,8 +438,6 @@ class Seed:
             "model",
             "n_parallels",
             "save_path",
-            "use_dummy",
-            "max_timeout",
             "json_mode",
             "reset_files",
             "prompts",

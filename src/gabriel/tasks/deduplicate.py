@@ -33,7 +33,6 @@ class DeduplicateConfig:
     n_parallels: int = 650
     n_runs: int = 3
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     additional_instructions: Optional[str] = None
     use_embeddings: bool = True
     group_size: int = 500
@@ -182,7 +181,6 @@ class Deduplicate:
                 model=self.cfg.model,
                 save_path=save_path,
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 json_mode=True,
                 reset_files=reset_files,
                 **kwargs,

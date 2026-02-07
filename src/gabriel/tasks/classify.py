@@ -57,11 +57,9 @@ class ClassifyConfig:
     min_frequency: float = 0.6
     additional_instructions: Optional[str] = None
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     modality: str = "text"
     n_attributes_per_run: int = 8
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
     differentiate: bool = False
     circle_first: Optional[bool] = None
     search_context_size: str = "medium"
@@ -436,9 +434,7 @@ class Classify:
             json_mode=self.cfg.modality != "audio",
             model=self.cfg.model,
             use_dummy=self.cfg.use_dummy,
-            max_timeout=self.cfg.max_timeout,
             reasoning_effort=self.cfg.reasoning_effort,
-            reasoning_summary=self.cfg.reasoning_summary,
             print_example_prompt=True,
             **kwargs,
         )

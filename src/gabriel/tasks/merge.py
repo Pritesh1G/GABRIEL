@@ -32,7 +32,6 @@ class MergeConfig:
     n_parallels: int = 650
     n_runs: int = 1
     use_dummy: bool = False
-    max_timeout: Optional[float] = None
     additional_instructions: Optional[str] = None
     use_embeddings: bool = True
     short_list_len: int = 16
@@ -337,7 +336,6 @@ class Merge:
                     model=self.cfg.model,
                     save_path=save_path,
                     use_dummy=self.cfg.use_dummy,
-                    max_timeout=self.cfg.max_timeout,
                     json_mode=True,
                     reset_files=reset_files if attempt == 0 else False,
                     **kwargs,

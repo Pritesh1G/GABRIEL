@@ -1551,8 +1551,10 @@ def _build_params(
     expected_schema:
         Optional JSON schema supplied when ``json_mode`` is requested.
     reasoning_effort, reasoning_summary:
-        Additional settings for modern models controlling hidden reasoning
-        tokens and optional summaries.
+        ``reasoning_effort`` controls how intensely the model reasons
+        (``none``, ``low``, ``medium``, ``high``). Higher values are typically
+        smarter but slower. ``reasoning_summary`` requests a concise reasoning
+        summary when supported.
     include:
         Optional list (or comma-separated string) of ``include`` fields to
         request from the Responses API. When ``web_search`` is enabled, the
@@ -2929,8 +2931,9 @@ async def get_all_responses(
     initially allows unlimited time for each request, then observes how long
     successful responses take and sets a timeout based on the 90th percentile of
     observed durations.  Subsequent calls use this timeout (capped by
-    ``max_timeout``) and it is increased if later responses are slower.  Any
-    request exceeding the current limit is cancelled and retried.  While the
+    ``max_timeout`` if provided) and it is increased if later responses are
+    slower.  Any request exceeding the current limit is cancelled and retried.
+    While the
     timeout is unbounded the helper automatically submits requests in
     background mode and polls for completion so that connections closed by the
     server or networking layer do not strand in-flight prompts.  You can force

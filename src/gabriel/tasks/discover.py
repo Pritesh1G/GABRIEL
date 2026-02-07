@@ -41,8 +41,6 @@ class DiscoverConfig:
     top_k_per_round: int = 1
     raw_term_definitions: bool = True
     reasoning_effort: Optional[str] = None
-    reasoning_summary: Optional[str] = None
-    max_timeout: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.additional_instructions is not None:
@@ -201,8 +199,6 @@ class Discover:
                 debug_print=False,
                 use_dummy=self.cfg.use_dummy,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
-                max_timeout=self.cfg.max_timeout,
             )
             coder = Codify(coder_cfg)
             codify_df = await coder.run(
@@ -237,12 +233,10 @@ class Discover:
                 model=self.cfg.model,
                 n_parallels=self.cfg.n_parallels,
                 use_dummy=self.cfg.use_dummy,
-                max_timeout=self.cfg.max_timeout,
                 differentiate=self.cfg.differentiate,
                 additional_instructions=self.cfg.additional_instructions,
                 modality=self.cfg.modality,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
             )
             cmp = Compare(cmp_cfg)
             compare_df = await cmp.run(
@@ -287,8 +281,6 @@ class Discover:
                 top_k_per_round=self.cfg.top_k_per_round,
                 raw_term_definitions=self.cfg.raw_term_definitions,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
-                max_timeout=self.cfg.max_timeout,
             )
             buck = Bucket(buck_cfg)
             bucket_df = await buck.run(
@@ -318,11 +310,9 @@ class Discover:
                 "use_dummy": self.cfg.use_dummy,
                 "modality": self.cfg.modality,
                 "reasoning_effort": self.cfg.reasoning_effort,
-                "reasoning_summary": self.cfg.reasoning_summary,
                 "n_attributes_per_run": 8,
                 "differentiate": True,
                 "additional_instructions": self.cfg.additional_instructions or "",
-                "max_timeout": self.cfg.max_timeout,
             }
 
             def swap_cs(text: str) -> str:
@@ -480,13 +470,11 @@ class Discover:
                 n_parallels=self.cfg.n_parallels,
                 n_runs=self.cfg.n_runs,
                 min_frequency=self.cfg.min_frequency,
-                additional_instructions=self.cfg.additional_instructions or "",
                 use_dummy=self.cfg.use_dummy,
+                additional_instructions=self.cfg.additional_instructions or "",
                 modality=self.cfg.modality,
                 reasoning_effort=self.cfg.reasoning_effort,
-                reasoning_summary=self.cfg.reasoning_summary,
                 n_attributes_per_run=8,
-                max_timeout=self.cfg.max_timeout,
             )
             clf = Classify(clf_cfg)
             classify_result = await clf.run(
