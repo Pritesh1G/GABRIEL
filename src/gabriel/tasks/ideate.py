@@ -501,8 +501,24 @@ class Ideate:
             reset_files=reset_files,
             **dedup_run_opts,
         )
-        if "mapped_report_text" in dedup_df.columns:
-            dedup_df["report_text"] = dedup_df["mapped_report_text"]
+        mapped_col = "mapped_report_text"
+        mapped_id_col = "mapped_report_text_ids"
+        if mapped_col in dedup_df.columns:
+            dedup_df["report_text"] = dedup_df[mapped_col]
+        if mapped_id_col in dedup_df.columns and "_dedup_id" in dedup_df.columns:
+            rep_mask = dedup_df["_dedup_id"] == dedup_df[mapped_id_col]
+            rep_mask |= dedup_df["_dedup_id"].isna() & dedup_df[mapped_id_col].isna()
+            dedup_df = dedup_df.loc[rep_mask].copy()
+            print(
+                "[Ideate] Collapsed to "
+                f"{len(dedup_df)} representative rows after deduplication."
+            )
+        elif mapped_col in dedup_df.columns:
+            dedup_df = dedup_df.drop_duplicates(subset=[mapped_col]).copy()
+            print(
+                "[Ideate] Collapsed to "
+                f"{len(dedup_df)} representative rows after deduplication."
+            )
         return dedup_df
 
     def _clean_columns(self, df: pd.DataFrame) -> pd.DataFrame:
