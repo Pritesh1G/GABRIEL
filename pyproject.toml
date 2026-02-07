@@ -24,7 +24,8 @@ keywords = [
     "economics",
     "econometrics",
     "machine learning",
-    "social sciences",
+    "science",
+    "social science",
     "text analysis",
 ]
 classifiers = [
