@@ -1906,11 +1906,33 @@ def _build_highlighted_text(
     return "".join(pieces)
 
 
+def _extract_label_pills(
+    snippet_map: Mapping[str, List[str]],
+    *,
+    max_labels: int = 24,
+) -> List[str]:
+    labels: List[str] = []
+    seen: Set[str] = set()
+    for snippets in snippet_map.values():
+        for snippet in snippets:
+            text = str(snippet).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            labels.append(text)
+            if len(labels) >= max_labels:
+                return labels
+    return labels
+
+
 def _build_header_html(
     header_rows: List[Tuple[str, str]],
     active_categories: List[str],
+    *,
+    category_labels: Optional[Mapping[str, str]] = None,
+    label_pills: Optional[Sequence[str]] = None,
 ) -> str:
-    if not header_rows and not active_categories:
+    if not header_rows and not active_categories and not label_pills:
         return ""
 
     card_rows: List[str] = []
@@ -1933,13 +1955,31 @@ def _build_header_html(
     if active_categories:
         pills = "".join(
             "<span class='gabriel-active-pill'>"
-            + html.escape(cat.replace("_", " ").title())
+            + html.escape(
+                category_labels.get(cat, cat).replace("_", " ").title()
+                if category_labels
+                else cat.replace("_", " ").title()
+            )
             + "</span>"
             for cat in active_categories
         )
         sections.append(
             "<div class='gabriel-active-cats'>"
             "<span class='gabriel-active-label'>Categories</span>"
+            f"<div class='gabriel-active-pill-stack'>{pills}</div>"
+            "</div>"
+        )
+
+    if label_pills:
+        pills = "".join(
+            "<span class='gabriel-active-pill'>"
+            + html.escape(str(label))
+            + "</span>"
+            for label in label_pills
+        )
+        sections.append(
+            "<div class='gabriel-active-cats'>"
+            "<span class='gabriel-active-label'>Labels</span>"
             f"<div class='gabriel-active-pill-stack'>{pills}</div>"
             "</div>"
         )
@@ -2263,6 +2303,7 @@ def _render_passage_viewer(
             header_rows.extend(text_attributes)
 
         active_categories = [cat for cat, snippets in snippet_map.items() if snippets]
+        label_pills = _extract_label_pills(snippet_map) if media else []
         passage_counts = {
             cat: len(snippet_map.get(cat, []))
             for cat in category_names
@@ -2275,6 +2316,7 @@ def _render_passage_viewer(
                 "snippets": snippet_map,
                 "header": header_rows,
                 "active": active_categories,
+                "label_pills": label_pills,
                 "counts": passage_counts,
                 "bools": bool_values,
                 "numeric": numeric_values,
@@ -2339,7 +2381,10 @@ def _render_passage_viewer(
             media=payload.get("media"),
         )
         header_html = _build_header_html(
-            payload["header"], payload["active"]
+            payload["header"],
+            payload["active"],
+            category_labels=category_labels,
+            label_pills=payload.get("label_pills"),
         )
         legend_token = f"interactive-{idx}-{random.random()}"
         legend_html = _build_legend_html(
