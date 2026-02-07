@@ -26,6 +26,7 @@ exist.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import functools
 import importlib.util
@@ -2475,12 +2476,19 @@ async def get_all_embeddings(
         verbose=verbose,
     )
     cooldown_until = 0.0
+    stop_event = asyncio.Event()
     active_workers = 0
     concurrency_cap = max(1, min(n_parallels, queue.qsize()))
     print(f"[init] Starting with {concurrency_cap} parallel workers")
     logger.info(f"[init] Starting with {concurrency_cap} parallel workers")
     rate_limit_errors_since_adjust = 0
     successes_since_adjust = 0
+
+    def _current_parallel_cap() -> int:
+        return concurrency_cap
+
+    def _maybe_emit_ramp_complete() -> None:
+        return None
 
     def maybe_adjust_concurrency() -> None:
         nonlocal concurrency_cap, rate_limit_errors_since_adjust, successes_since_adjust
@@ -2605,7 +2613,16 @@ async def get_all_embeddings(
                         **get_embedding_kwargs,
                     )
                 )
-                emb, _ = await task
+                try:
+                    if call_timeout is None:
+                        emb, _ = await task
+                    else:
+                        emb, _ = await asyncio.wait_for(task, timeout=call_timeout)
+                except asyncio.TimeoutError:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+                    raise
                 embeddings[ident] = emb
                 processed += 1
                 successes_since_adjust += 1
@@ -2700,9 +2717,11 @@ async def get_all_embeddings(
     try:
         await queue.join()
     except (asyncio.CancelledError, KeyboardInterrupt):
+        stop_event.set()
         logger.info("Cancellation requested, shutting down workers...")
         raise
     finally:
+        stop_event.set()
         for w in workers:
             w.cancel()
         await asyncio.gather(*workers, return_exceptions=True)
