@@ -4481,9 +4481,10 @@ async def get_all_responses(
             msg = (
                 "Encountered first rate limit error. Future rate limit errors will be silenced and tracked in periodic updates."
             )
-            logger.warning(msg)
             if message_verbose:
                 print(msg)
+            else:
+                logger.warning(msg)
             first_rate_limit_logged = True
         else:
             if detail:
@@ -4497,9 +4498,10 @@ async def get_all_responses(
             msg = (
                 "Encountered first connection error. Future connection errors will be silenced and tracked in periodic updates."
             )
-            logger.warning(msg)
             if message_verbose:
                 print(msg)
+            else:
+                logger.warning(msg)
             first_connection_logged = True
         else:
             if detail:
@@ -4518,9 +4520,10 @@ async def get_all_responses(
         if concurrency_cap > ramp_cap:
             concurrency_cap = ramp_cap
         msg = f"[parallelization] Halting ramp-up at {ramp_cap} due to {reason}."
-        logger.warning(msg)
         if message_verbose:
             print(msg)
+        else:
+            logger.warning(msg)
 
     def _record_timeout_event(now: Optional[float] = None) -> None:
         ts = now if now is not None else time.time()
@@ -4961,7 +4964,6 @@ async def get_all_responses(
                     f"{int(round(error_window))}s (rate-limit={recent_rate_limit_errors}, "
                     f"connection={recent_connection_errors})."
                 )
-                logger.warning(reason)
                 _halt_ramp_up("error recovery")
                 emit_parallelization_status(reason, force=True)
             rate_limit_errors_since_adjust = 0
@@ -4986,7 +4988,7 @@ async def get_all_responses(
             and (now - last_concurrency_scale_up) >= error_window
         ):
             growth_headroom_limit = max(1, int(math.floor(ceiling_cap * 0.9)))
-            success_threshold = max(60, int(math.ceil(concurrency_cap * 2.5)))
+            success_threshold = max(60, int(math.ceil(concurrency_cap * 1.5)))
             if (
                 concurrency_cap < growth_headroom_limit
                 and successes_since_adjust >= success_threshold
@@ -5427,7 +5429,6 @@ async def get_all_responses(
                         dedup_key=("cap-adjustment", type(e).__name__, str(e)),
                     )
                     logger.debug("Throughput tuning failed; retaining existing cap.", exc_info=True)
-                concurrency_cap = new_cap
                 if resps and all((isinstance(r, str) and not r.strip()) for r in resps):
                     if call_timeout is not None:
                         elapsed = time.time() - start
