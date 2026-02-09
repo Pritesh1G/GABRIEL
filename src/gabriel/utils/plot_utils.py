@@ -1955,10 +1955,12 @@ def bar_plot(
         if not counting_categories:
             def _compute_error_from_string(kind: str) -> List[float]:
                 mode = (kind or "").strip().lower()
+                reference_column = aggregated.columns[0]
+                grouped_series = grouped[reference_column]
                 if mode == "std":
-                    series = grouped.std(ddof=1)
+                    series = grouped_series.std(ddof=1)
                 elif mode == "sem":
-                    series = grouped.apply(lambda s: sem(s, nan_policy="omit"))
+                    series = grouped_series.apply(lambda s: sem(s, nan_policy="omit"))
                 elif mode.startswith("ci"):
                     digits = mode[2:] or "95"
                     try:
@@ -1967,15 +1969,12 @@ def bar_plot(
                         raise ValueError("ci error bars must be followed by a percentage, e.g. 'ci95'.") from exc
                     level = max(0.0, min(level, 0.999))
                     z_score = norm.ppf(0.5 + level / 2.0)
-                    sem_series = grouped.apply(lambda s: sem(s, nan_policy="omit"))
+                    sem_series = grouped_series.apply(lambda s: sem(s, nan_policy="omit"))
                     series = sem_series * z_score
                 else:
                     raise ValueError(
                         "String error_bars must be one of 'std', 'sem', 'ci90', 'ci95', or 'ci99'."
                     )
-                reference_column = aggregated.columns[0]
-                if isinstance(series, pd.DataFrame):
-                    series = series[reference_column]
                 result_map = {
                     str(idx): float(val) if pd.notna(val) else float("nan") for idx, val in series.items()
                 }
