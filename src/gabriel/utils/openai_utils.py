@@ -1819,11 +1819,14 @@ async def get_response(
         set_log_level(logging_level)
     _require_api_key()
     base_url = base_url or os.getenv("OPENAI_BASE_URL")
-    client_async = _get_client(
-        base_url,
-        httpx_max_connections=httpx_max_connections,
-        httpx_max_keepalive_connections=httpx_max_keepalive_connections,
-    )
+    if httpx_max_connections or httpx_max_keepalive_connections:
+        client_async = _get_client(
+            base_url,
+            httpx_max_connections=httpx_max_connections,
+            httpx_max_keepalive_connections=httpx_max_keepalive_connections,
+        )
+    else:
+        client_async = _get_client(base_url)
 
     try:
         poll_interval = float(background_poll_interval)
