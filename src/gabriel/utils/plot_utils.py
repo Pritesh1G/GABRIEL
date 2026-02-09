@@ -18,6 +18,7 @@ and additional features.  For Python 3.12 and SciPy 1.16+, use
 from __future__ import annotations
 
 import math
+import os
 import random
 import re
 import textwrap
@@ -73,6 +74,77 @@ def _to_native(value: Any) -> Any:
     if isinstance(value, np.generic):
         return value.item()
     return value
+
+
+def _normalize_save_format(save_format: Optional[str]) -> Optional[str]:
+    """Normalize a requested save format to a lowercase file extension."""
+
+    if save_format is None:
+        return None
+    fmt = str(save_format).strip().lower().lstrip(".")
+    return fmt or None
+
+
+def _resolve_plot_save_path(
+    save_path: Optional[Union[str, Path]],
+    *,
+    default_name: str,
+    save_format: Optional[str] = None,
+    batch_idx: int = 0,
+    total_batches: int = 1,
+) -> Optional[Path]:
+    """Return a fully qualified save path for a plot, creating directories."""
+
+    if save_path is None:
+        return None
+    expanded = os.path.expandvars(os.path.expanduser(str(save_path)))
+    path = Path(expanded)
+    fmt = _normalize_save_format(save_format)
+    suffix = f"_{batch_idx + 1:02d}" if total_batches > 1 else ""
+    if path.suffix:
+        ext = fmt or path.suffix.lstrip(".")
+        stem = path.stem + suffix
+        target = path.with_name(f"{stem}.{ext}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        return target
+    path.mkdir(parents=True, exist_ok=True)
+    ext = fmt or "png"
+    safe_name = default_name or "plot"
+    return path / f"{safe_name}{suffix}.{ext}"
+
+
+def _save_figure(
+    fig: plt.Figure,
+    *,
+    save_path: Optional[Union[str, Path]],
+    default_name: str,
+    save_format: Optional[str] = None,
+    batch_idx: int = 0,
+    total_batches: int = 1,
+    bbox_inches: Optional[str] = None,
+    dpi: Optional[int] = None,
+    print_save_path: bool = True,
+) -> Optional[Path]:
+    """Save ``fig`` if ``save_path`` is provided and return the path."""
+
+    target = _resolve_plot_save_path(
+        save_path,
+        default_name=default_name,
+        save_format=save_format,
+        batch_idx=batch_idx,
+        total_batches=total_batches,
+    )
+    if target is None:
+        return None
+    save_kwargs: Dict[str, Any] = {}
+    if bbox_inches:
+        save_kwargs["bbox_inches"] = bbox_inches
+    if dpi is not None:
+        save_kwargs["dpi"] = dpi
+    fig.savefig(target, **save_kwargs)
+    if print_save_path:
+        print(f"Saved plot to {target}")
+    return target
 
 
 def _prepare_fixed_effect_columns(
@@ -1021,6 +1093,10 @@ def regression_plot(
     dpi: int = 300,
     wrap_width: int = 60,
     show_plots: bool = True,
+    save_path: Optional[Union[str, Path]] = None,
+    save_format: Optional[str] = None,
+    bbox_inches: Optional[str] = None,
+    print_save_path: bool = True,
     tablefmt: str = "github",
     robust: bool = True,
     print_summary: bool = True,
@@ -1048,7 +1124,9 @@ def regression_plot(
     strings.  For each pair, two models are estimated: one with just the
     independent variable and one including any specified ``controls``.  When
     ``show_plots`` is True, a binned scatter plot with quantile bins and error
-    bars is displayed.  If ``zscore_x`` or ``zscore_y`` is True, the respective
+    bars is displayed.  Provide ``save_path`` to save plots to a directory or
+    filename (format inferred from the extension or overridden via
+    ``save_format``).  If ``zscore_x`` or ``zscore_y`` is True, the respective
     variables are standardised before analysis (but the original variables
     remain untouched in the output).
 
@@ -1193,6 +1271,12 @@ def regression_plot(
         )
 
     results: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    save_path_is_file = False
+    if save_path is not None:
+        expanded = os.path.expandvars(os.path.expanduser(str(save_path)))
+        save_path_is_file = bool(Path(expanded).suffix)
+    total_plot_batches = len(x_vars) * len(y_vars) if save_path_is_file else 1
+    plot_counter = 0
 
     def _resolve_column(name: str) -> Tuple[str, str]:
         """Return the actual dataframe column and display label for ``name``."""
@@ -1244,7 +1328,8 @@ def regression_plot(
             xm = grp[x_use].mean()
             ym = grp[y_use].mean()
             yerr = grp[y_use].apply(sem)
-            if show_plots:
+            should_plot = show_plots or save_path is not None
+            if should_plot:
                 fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
                 ax.errorbar(xm, ym, yerr=yerr, fmt="o", color="black",
                             ecolor="black", capsize=3, markersize=6)
@@ -1259,7 +1344,22 @@ def regression_plot(
                     ax.set_xlim(xlim)
                 if ylim is not None:
                     ax.set_ylim(ylim)
-                plt.show()
+                safe_title = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") or "regression_plot"
+                _save_figure(
+                    fig,
+                    save_path=save_path,
+                    default_name=safe_title,
+                    save_format=save_format,
+                    batch_idx=plot_counter,
+                    total_batches=total_plot_batches,
+                    bbox_inches=bbox_inches,
+                    print_save_path=print_save_path,
+                )
+                plot_counter += 1
+                if show_plots:
+                    plt.show()
+                else:
+                    plt.close(fig)
             # Prepare design matrices and variable names
             y_arr = data[y_use].values
             # Simple model: intercept and primary x variable
@@ -1555,6 +1655,9 @@ def bar_plot(
     max_bars_per_plot: Optional[int] = 12,
     sort_mode: Optional[str] = "descending",
     save_path: Optional[Union[str, Path]] = None,
+    save_format: Optional[str] = None,
+    bbox_inches: Optional[str] = None,
+    print_save_path: bool = True,
     vertical_bar_width: float = 0.92,
     horizontal_bar_height: float = 0.7,
     min_category_fraction: float = 0.0,
@@ -1646,9 +1749,18 @@ def bar_plot(
         totals.  Pass ``"none"`` to preserve the existing order or ``"random"``
         for a shuffled arrangement.
     save_path : path-like, optional
-        Directory where generated figures should be saved.  When omitted, plots
-        are only displayed.  Files are named using the title plus a numerical
-        suffix when multiple panels are created.
+        Directory or filename where generated figures should be saved.  When
+        omitted, plots are only displayed.  If a directory is supplied, files
+        are named using the title plus a numerical suffix when multiple panels
+        are created.  If a filename is supplied, the extension determines the
+        output format unless ``save_format`` overrides it.
+    save_format : str, optional
+        Override the output format (e.g., ``"png"``, ``"pdf"``).  When omitted
+        the format is inferred from ``save_path`` or defaults to PNG.
+    bbox_inches : str, optional
+        Optional ``bbox_inches`` argument passed through to ``fig.savefig``.
+    print_save_path : bool, default True
+        Whether to print the resolved save path when saving figures.
     vertical_bar_width, horizontal_bar_height : float, default (0.92, 0.7)
         Width/height of each bar group for the respective orientations.  For
         grouped bars the value is split evenly across the series.
@@ -2119,13 +2231,7 @@ def bar_plot(
 
     total_chunks = len(chunk_sizes)
 
-    output_dir: Optional[Path]
-    if save_path is None:
-        output_dir = None
-    else:
-        output_dir = Path(save_path)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        safe_title = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") or "bar_plot"
+    safe_title = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") or "bar_plot"
 
     figures: List[Tuple[plt.Figure, plt.Axes]] = []
 
@@ -2354,10 +2460,16 @@ def bar_plot(
             fig.subplots_adjust(left=horizontal_label_fraction, right=right_margin)
         figures.append((fig, ax))
 
-        if output_dir is not None:
-            suffix = f"_{chunk_idx + 1:02d}" if total_chunks > 1 else ""
-            file_name = f"{safe_title or 'bar_plot'}{suffix}.png"
-            fig.savefig(output_dir / file_name, bbox_inches="tight")
+        _save_figure(
+            fig,
+            save_path=save_path,
+            default_name=safe_title or "bar_plot",
+            save_format=save_format,
+            batch_idx=chunk_idx,
+            total_batches=total_chunks,
+            bbox_inches=bbox_inches,
+            print_save_path=print_save_path,
+        )
         start = end
 
     if figures:
@@ -2390,6 +2502,10 @@ def box_plot(
     wrap_width: int = 22,
     summary_precision: int = 2,
     print_summary: bool = True,
+    save_path: Optional[Union[str, Path]] = None,
+    save_format: Optional[str] = None,
+    bbox_inches: Optional[str] = None,
+    print_save_path: bool = True,
 ) -> Dict[str, Any]:
     """Render a high-DPI box plot that matches the house style.
 
@@ -2402,6 +2518,9 @@ def box_plot(
     with a ``summary`` DataFrame of descriptive statistics (count, median,
     quartiles and whiskers).  This mirrors the ergonomics of :func:`regression_plot`
     and friends by providing both a styled visual and machine-friendly output.
+    Provide ``save_path`` to persist the figure (optionally overriding the
+    format via ``save_format``).  When ``save_path`` is a directory, the filename
+    defaults to a sanitized version of the title.
 
     Examples
     --------
@@ -2523,15 +2642,18 @@ def box_plot(
             print(display_df.to_string())
 
     plt.tight_layout()
+    safe_title = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") or "box_plot"
+    _save_figure(
+        fig,
+        save_path=save_path,
+        default_name=safe_title,
+        save_format=save_format,
+        bbox_inches=bbox_inches,
+        print_save_path=print_save_path,
+    )
     plt.show()
 
     return {"figure": fig, "ax": ax, "summary": summary_df}
-import os, textwrap
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
-from matplotlib import cm
 
 def line_plot(
     df,
@@ -2567,6 +2689,9 @@ def line_plot(
     alpha=1.0,
     max_lines_per_plot=8,               # batch panels if many series
     save_path=None,                     # file or dir; batches get suffix _setN
+    save_format=None,                   # override extension (e.g., "png", "pdf")
+    bbox_inches=None,                   # pass through to fig.savefig
+    print_save_path=True,
     show=True,
 ):
     """
@@ -2600,6 +2725,8 @@ def line_plot(
     - `legend_order=['Democrat','Republican']` for stable legend order.
     - `gradient=False` for solid lines; `True` for aesthetic gradient lines.
     - `top_k=...` to focus on the most important series by overall plotted mass.
+    - `save_path='charts/lines.pdf'` to save output (format inferred from the extension
+      or overridden via `save_format`).
     """
 
     # ---- optional SciPy spline
@@ -2860,15 +2987,18 @@ def line_plot(
 
         plt.tight_layout()
 
-        # save
-        if save_path:
-            if os.path.isdir(save_path):
-                base = (title or "line_plot").strip().replace(" ", "_")
-                out = os.path.join(save_path, f"{base}_set{batch_idx+1}.png")
-            else:
-                root, ext = os.path.splitext(save_path)
-                out = f"{root}_set{batch_idx+1}{ext or '.png'}"
-            plt.savefig(out, dpi=dpi)
+        safe_title = re.sub(r"[^A-Za-z0-9]+", "_", title or "line_plot").strip("_") or "line_plot"
+        _save_figure(
+            fig,
+            save_path=save_path,
+            default_name=safe_title,
+            save_format=save_format,
+            batch_idx=batch_idx,
+            total_batches=len(batches),
+            bbox_inches=bbox_inches,
+            dpi=dpi,
+            print_save_path=print_save_path,
+        )
 
         if show:
             plt.show()
