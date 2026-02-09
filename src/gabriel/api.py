@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 import pandas as pd
 from typing import Awaitable, Callable, Dict, Optional, Union, Any, List, Mapping, Sequence
@@ -69,8 +70,40 @@ __all__ = [
     "view",
 ]
 
+
+def _load_cached_dataframe(
+    final_path: Optional[str],
+    *,
+    task_name: str,
+) -> pd.DataFrame:
+    if not final_path:
+        raise ValueError(
+            f"{task_name} does not have a cached final output file; "
+            "provide a DataFrame to run the task."
+        )
+    if os.path.exists(final_path):
+        print(
+            f"[API] df is None for {task_name}; loading cached results from {final_path}."
+        )
+        return pd.read_csv(final_path)
+    raise FileNotFoundError(
+        f"{task_name} cached output not found at {final_path}. "
+        "Provide a DataFrame to compute results."
+    )
+
+
+def _debias_default_run_name(
+    measurement_attribute: Optional[str],
+    removal_attribute: Optional[str],
+) -> str:
+    base_name = measurement_attribute or removal_attribute or "signal"
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", base_name).strip("_")
+    prefix = "debias"
+    return f"{prefix}_{cleaned}" if cleaned else prefix
+
+
 async def rate(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     attributes: Dict[str, str],
@@ -99,7 +132,8 @@ async def rate(
     Parameters
     ----------
     df:
-        Source DataFrame containing the passages to rate.
+        Source DataFrame containing the passages to rate. When ``None``, load
+        cached results from ``save_dir`` instead of recomputing.
     column_name:
         Column in ``df`` that holds the passages (text, image, audio, or PDF
         references depending on ``modality``).
@@ -154,6 +188,10 @@ async def rate(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        base_name = os.path.splitext(file_name)[0]
+        final_path = os.path.join(save_dir, f"{base_name}_cleaned.csv")
+        return _load_cached_dataframe(final_path, task_name="Rate")
     cfg = RateConfig(
         attributes=attributes,
         save_dir=save_dir,
@@ -177,7 +215,7 @@ async def rate(
     )
 
 async def extract(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     attributes: Dict[str, str],
@@ -206,7 +244,8 @@ async def extract(
     Parameters
     ----------
     df:
-        Source DataFrame containing the passages to parse.
+        Source DataFrame containing the passages to parse. When ``None``, load
+        cached results from ``save_dir`` instead of recomputing.
     column_name:
         Column in ``df`` with the content to extract from.
     attributes:
@@ -258,6 +297,10 @@ async def extract(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        base_name = os.path.splitext(file_name)[0]
+        final_path = os.path.join(save_dir, f"{base_name}_cleaned.csv")
+        return _load_cached_dataframe(final_path, task_name="Extract")
     cfg = ExtractConfig(
         attributes=attributes,
         save_dir=save_dir,
@@ -388,7 +431,7 @@ async def seed(
 
 
 async def classify(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: Optional[str] = None,
     *,
     labels: Dict[str, str],
@@ -421,7 +464,8 @@ async def classify(
     Parameters
     ----------
     df:
-        DataFrame containing content to classify.
+        DataFrame containing content to classify. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column with the main passage text. Can be ``None`` when using paired
         circle/square inputs.
@@ -476,6 +520,10 @@ async def classify(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        base_name = os.path.splitext(file_name)[0]
+        final_path = os.path.join(save_dir, f"{base_name}_cleaned.csv")
+        return _load_cached_dataframe(final_path, task_name="Classify")
     cfg = ClassifyConfig(
         labels=labels,
         save_dir=save_dir,
@@ -669,7 +717,7 @@ async def id8(*args, **kwargs) -> pd.DataFrame:
 
 
 async def deidentify(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     save_dir: str,
@@ -698,7 +746,8 @@ async def deidentify(
     Parameters
     ----------
     df:
-        DataFrame containing passages to deidentify.
+        DataFrame containing passages to deidentify. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column in ``df`` holding the text to scrub.
     save_dir:
@@ -745,6 +794,10 @@ async def deidentify(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        base_name = os.path.splitext(file_name)[0]
+        final_path = os.path.join(save_dir, f"{base_name}_cleaned.csv")
+        return _load_cached_dataframe(final_path, task_name="Deidentify")
     cfg = DeidentifyConfig(
         save_dir=save_dir,
         file_name=file_name,
@@ -768,7 +821,7 @@ async def deidentify(
     )
 
 async def rank(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     attributes: Union[Dict[str, str], List[str]],
@@ -817,7 +870,8 @@ async def rank(
     Parameters
     ----------
     df:
-        DataFrame containing passages to rank.
+        DataFrame containing passages to rank. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column holding the content to rank.
     attributes:
@@ -881,6 +935,14 @@ async def rank(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        if recursive:
+            base_folder = os.path.join(save_dir, f"{file_name}_recursive")
+            final_path = os.path.join(base_folder, "recursive_final.csv")
+        else:
+            base_name = os.path.splitext(file_name)[0]
+            final_path = os.path.join(save_dir, f"{base_name}_final.csv")
+        return _load_cached_dataframe(final_path, task_name="Rank")
     cfg = RankConfig(
         attributes=attributes,
         n_rounds=n_rounds,
@@ -945,7 +1007,7 @@ async def rank(
 
 
 async def codify(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     save_dir: str,
@@ -976,7 +1038,8 @@ async def codify(
     Parameters
     ----------
     df:
-        DataFrame containing the passages to code.
+        DataFrame containing the passages to code. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column with the text to be coded.
     save_dir:
@@ -1028,6 +1091,9 @@ async def codify(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        final_path = os.path.join(save_dir, "coded_passages.csv")
+        return _load_cached_dataframe(final_path, task_name="Codify")
     cfg_kwargs = dict(cfg_kwargs)
     
     cfg = CodifyConfig(
@@ -1056,7 +1122,7 @@ async def codify(
 
 
 async def paraphrase(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     instructions: str,
@@ -1089,7 +1155,8 @@ async def paraphrase(
     Parameters
     ----------
     df:
-        DataFrame containing passages to paraphrase.
+        DataFrame containing passages to paraphrase. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column with text to rewrite.
     instructions:
@@ -1145,6 +1212,10 @@ async def paraphrase(
     """
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        base_name = os.path.splitext(file_name)[0]
+        final_path = os.path.join(save_dir, f"{base_name}_cleaned.csv")
+        return _load_cached_dataframe(final_path, task_name="Paraphrase")
     cfg = ParaphraseConfig(
         instructions=instructions,
         revised_column_name=revised_column_name,
@@ -1173,7 +1244,7 @@ async def paraphrase(
 
 
 async def compare(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     circle_column_name: str,
     square_column_name: str,
     *,
@@ -1201,7 +1272,9 @@ async def compare(
     Parameters
     ----------
     df:
-        DataFrame containing the paired passages to compare.
+        DataFrame containing the paired passages to compare. When ``None``,
+        cached results cannot be loaded because this task does not persist a
+        final output DataFrame.
     circle_column_name, square_column_name:
         Columns representing the two sides of each comparison.
     save_dir:
@@ -1246,6 +1319,8 @@ async def compare(
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        return _load_cached_dataframe(None, task_name="Compare")
     cfg = CompareConfig(
         save_dir=save_dir,
         file_name=file_name,
@@ -1269,7 +1344,7 @@ async def compare(
 
 
 async def bucket(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     save_dir: str,
@@ -1295,7 +1370,8 @@ async def bucket(
     Parameters
     ----------
     df:
-        DataFrame containing passages to bucket.
+        DataFrame containing passages to bucket. When ``None``, load cached
+        results from ``save_dir`` instead of recomputing.
     column_name:
         Column holding the text to cluster.
     save_dir:
@@ -1338,6 +1414,9 @@ async def bucket(
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        final_path = os.path.join(save_dir, file_name)
+        return _load_cached_dataframe(final_path, task_name="Bucket")
     cfg = BucketConfig(
         bucket_count=bucket_count,
         save_dir=save_dir,
@@ -1359,7 +1438,7 @@ async def bucket(
 
 
 async def discover(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     *,
     column_name: Optional[str] = None,
     circle_column_name: Optional[str] = None,
@@ -1396,7 +1475,9 @@ async def discover(
     Parameters
     ----------
     df:
-        DataFrame containing the corpus to mine for labels.
+        DataFrame containing the corpus to mine for labels. When ``None``,
+        cached results cannot be loaded because this task does not persist a
+        final output DataFrame.
     column_name:
         Column with free-form text to analyse. Optional when providing paired
         circle/square columns for contrastive discovery.
@@ -1456,6 +1537,11 @@ async def discover(
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        raise ValueError(
+            "Discover does not persist a final output DataFrame; "
+            "provide a DataFrame to run the task."
+        )
     cfg = DiscoverConfig(
         save_dir=save_dir,
         model=model,
@@ -1489,7 +1575,7 @@ async def discover(
 
 
 async def deduplicate(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     save_dir: str,
@@ -1517,7 +1603,9 @@ async def deduplicate(
     Parameters
     ----------
     df:
-        DataFrame containing the passages to deduplicate.
+        DataFrame containing the passages to deduplicate. When ``None``,
+        cached results cannot be loaded because this task does not persist a
+        final output DataFrame.
     column_name:
         Column holding the text to deduplicate.
     save_dir:
@@ -1566,6 +1654,8 @@ async def deduplicate(
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        return _load_cached_dataframe(None, task_name="Deduplicate")
     cfg = DeduplicateConfig(
         save_dir=save_dir,
         file_name=file_name,
@@ -1714,7 +1804,7 @@ async def merge(
 
 
 async def filter(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     condition: str,
@@ -1743,7 +1833,9 @@ async def filter(
     Parameters
     ----------
     df:
-        DataFrame containing passages to filter.
+        DataFrame containing passages to filter. When ``None``, cached results
+        cannot be loaded because this task does not persist a final output
+        DataFrame.
     column_name:
         Column with the text to evaluate.
     condition:
@@ -1791,6 +1883,8 @@ async def filter(
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
     os.makedirs(save_dir, exist_ok=True)
+    if df is None:
+        return _load_cached_dataframe(None, task_name="Filter")
     cfg = FilterConfig(
         condition=condition,
         save_dir=save_dir,
@@ -1815,7 +1909,7 @@ async def filter(
 
 
 async def debias(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     column_name: str,
     *,
     mode: MeasurementMode = "rate",
@@ -1852,7 +1946,8 @@ async def debias(
     Parameters
     ----------
     df:
-        DataFrame containing passages to measure and debias.
+        DataFrame containing passages to measure and debias. When ``None``,
+        load cached results from ``save_dir`` instead of recomputing.
     column_name:
         Column with the text to process.
     mode:
@@ -1917,6 +2012,13 @@ async def debias(
     """
 
     save_dir = os.path.expandvars(os.path.expanduser(save_dir))
+    if df is None:
+        run_name = run_name or _debias_default_run_name(
+            measurement_attribute, removal_attribute
+        )
+        run_dir = os.path.join(save_dir, run_name)
+        final_path = os.path.join(run_dir, "debias_results.csv")
+        return _load_cached_dataframe(final_path, task_name="Debias")
     measurement_kwargs = dict(measurement_kwargs or {})
     removal_kwargs = dict(removal_kwargs or {})
     if response_fn is not None:
