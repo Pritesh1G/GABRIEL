@@ -1956,7 +1956,7 @@ def bar_plot(
             def _compute_error_from_string(kind: str) -> List[float]:
                 mode = (kind or "").strip().lower()
                 reference_column = aggregated.columns[0]
-                grouped_series = grouped[reference_column]
+                grouped_series = working_df.groupby(category_column, observed=True)[reference_column]
                 if mode == "std":
                     series = grouped_series.std(ddof=1)
                 elif mode == "sem":
