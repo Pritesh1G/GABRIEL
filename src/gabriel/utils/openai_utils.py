@@ -775,6 +775,7 @@ def _print_run_banner(
     use_batch: bool,
     modality: Optional[str],
     web_search: bool,
+    reasoning_effort: Optional[str],
     estimated_cost: Optional[Dict[str, float]],
     max_output_tokens: Optional[int],
     stats: Dict[str, Any],
@@ -794,8 +795,9 @@ def _print_run_banner(
         f"Prompts: {len(prompts):,} | Words: ~{total_words:,} | Words per prompt: ~{words_per_prompt:,}"
     )
     modality_segment = f" | modality: {modality}" if modality else ""
+    reasoning_segment = f"Reasoning effort: {reasoning_effort or 'default'}"
     print(
-        f"Model: {model} | Mode: {'batch' if use_batch else 'streaming'}{modality_segment}"
+        f"Model: {model} | {reasoning_segment} | Mode: {'batch' if use_batch else 'streaming'}{modality_segment}"
     )
     pricing = _lookup_model_pricing(model)
     if pricing:
@@ -3309,6 +3311,7 @@ async def get_all_responses(
         use_batch=use_batch,
         modality=inferred_modality,
         web_search=web_search_requested,
+        reasoning_effort=reasoning_effort,
         estimated_cost=cost_estimate,
         max_output_tokens=max_output_tokens,
         stats=dataset_stats,
