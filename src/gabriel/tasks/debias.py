@@ -28,7 +28,9 @@ from .rank import Rank, RankConfig
 from .rate import Rate, RateConfig
 try:  # statsmodels is optional; fall back to a lightweight solver if missing
     from ..utils.plot_utils import fit_ols as _fit_ols
+    from ..utils.plot_utils import regression_plot as _regression_plot
 except Exception:  # pragma: no cover - fallback exercised when statsmodels absent
+    _regression_plot = None
 
     def fit_ols(
         y: np.ndarray,
@@ -1042,7 +1044,7 @@ class DebiasPipeline:
             original_column=original_column,
             debiased_column=diff_col,
             title="original ~ (original - stripped)",
-            plot_filename=f"{variant_key}_diff_vs_original.png",
+            plot_filename=f"{variant_key}_diff_vs_original.pdf",
         )
 
         twostep_col = (
@@ -1092,7 +1094,7 @@ class DebiasPipeline:
                 original_column=original_column,
                 debiased_column=twostep_col,
                 title="original ~ debiased (two-step)",
-                plot_filename=f"{variant_key}_twostep_vs_original.png",
+                plot_filename=f"{variant_key}_twostep_vs_original.pdf",
             )
 
         correlation = float(y_series.corr(s_series))
@@ -1245,7 +1247,9 @@ class DebiasPipeline:
                 names=["Intercept", remaining_signal_column],
                 title=f"Stage-1 regression: stripped ~ remaining signal [{display_name}]",
             )
-        delta = float(reg["coef"][1])
+        coef = reg["coef"]
+        coef_vals = coef.to_numpy() if isinstance(coef, pd.Series) else np.asarray(coef)
+        delta = float(coef_vals[1])
         return self._regression_dict(reg, ["Intercept", remaining_signal_column]), delta
 
     # ------------------------------------------------------------------
@@ -1304,64 +1308,25 @@ class DebiasPipeline:
     ) -> Optional[str]:
         if df.empty:
             return None
-        data = df[[x_col, y_col]].dropna().copy()
-        if data.empty:
-            return None
-        data[x_col] = pd.to_numeric(data[x_col], errors="coerce")
-        data[y_col] = pd.to_numeric(data[y_col], errors="coerce")
-        data = data.dropna()
-        if data.empty:
-            return None
-
-        n_bins = max(1, min(int(bins), len(data)))
-        data["_bin"] = pd.qcut(data[x_col], q=n_bins, duplicates="drop")
-        grp = data.groupby("_bin", observed=True)
-        xm = grp[x_col].mean()
-        ym = grp[y_col].mean()
-        counts = grp[y_col].count().astype(float)
-        std = grp[y_col].std(ddof=1)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            yerr = std / np.sqrt(counts)
-        yerr = yerr.fillna(0.0)
-
-        x_vals = data[x_col].values.astype(float)
-        beta0, beta1 = reg_res["coef"][0], reg_res["coef"][1]
-        x_min = float(np.min(x_vals))
-        x_max = float(np.max(x_vals))
-        if x_max == x_min:
-            pad = 1.0 if x_max == 0 else 0.05 * abs(x_max)
-            x_min -= pad
-            x_max += pad
-        x_line = np.linspace(x_min, x_max, 200)
-        y_line = beta0 + beta1 * x_line
-
-        fig, ax = plt.subplots(figsize=(7, 5), dpi=400)
-        colours = plt.cm.get_cmap("rainbow")(np.linspace(0, 1, len(xm)))
-        ax.errorbar(
-            xm,
-            ym,
-            yerr=yerr,
-            fmt="o",
-            color="black",
-            ecolor="black",
-            capsize=3,
-            markersize=6,
-        )
-        ax.scatter(xm, ym, c=colours, s=50, zorder=3)
-        ax.plot(x_line, y_line, color="black", linewidth=2, label="OLS fit")
-        ax.set_title(title)
-        ax.set_xlabel(x_col)
-        ax.set_ylabel(y_col)
-        ax.margins(x=0.05, y=0.05)
-        ax.legend(loc="best")
-        ax.grid(True, alpha=0.2)
-        fig.tight_layout()
-
         plot_path = os.path.join(self.run_dir, filename)
-        fig.savefig(plot_path)
-        plt.close(fig)
-        if self.cfg.verbose:
-            print(f"[Debias] Saved regression plot to {plot_path}")
+        if _regression_plot is None:
+            return None
+        try:
+            _regression_plot(
+                df,
+                x=x_col,
+                y=y_col,
+                bins=bins,
+                show_plots=False,
+                save_path=plot_path,
+                save_format="pdf",
+                bbox_inches="tight",
+                print_save_path=self.cfg.verbose,
+                print_summary=False,
+                robust=self.cfg.robust_regression,
+            )
+        except Exception:
+            return None
         return plot_path
 
     # ------------------------------------------------------------------
