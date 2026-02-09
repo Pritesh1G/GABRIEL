@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import json
 import requests
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence, List
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,10 @@ class MapMaker:
     map_type:
         Determines the map produced: ``"county"``, ``"state"``
         or ``"country"`` (with ``"global"`` as an alias).
+    static_formats:
+        Optional static image formats to export alongside the HTML output.
+        Defaults to ``("png",)``; set to ``None`` or an empty list to skip
+        static exports.
     """
 
     def __init__(
@@ -67,6 +71,7 @@ class MapMaker:
         z_score: bool = True,
         color_scale: str = "RdBu",
         map_type: str = "county",
+        static_formats: Optional[Sequence[str] | str] = ("png",),
     ) -> None:
         self.df = df.copy()
         self.fips_col = fips_col
@@ -90,6 +95,23 @@ class MapMaker:
 
         self.z_score = z_score
         self.color_scale = color_scale
+        self.static_formats = self._normalize_static_formats(static_formats)
+
+    @staticmethod
+    def _normalize_static_formats(static_formats: Optional[Sequence[str] | str]) -> List[str]:
+        """Normalize requested static output formats (e.g., png, pdf)."""
+        if static_formats is None:
+            return []
+        if isinstance(static_formats, str):
+            formats = [static_formats]
+        else:
+            formats = list(static_formats)
+        cleaned: List[str] = []
+        for fmt in formats:
+            normalized = str(fmt).strip().lower().lstrip(".")
+            if normalized:
+                cleaned.append(normalized)
+        return cleaned
 
     def _compute_zscore(self, values: np.ndarray) -> np.ndarray:
         """Compute z‑scores with safe handling of NaNs and constant arrays."""
@@ -127,7 +149,7 @@ class MapMaker:
         if self.z_score:
             fig.update_coloraxes(cmid=0)
         ext = os.path.splitext(save_path)[1].lower()
-        if ext in {".png", ".jpg", ".jpeg"}:
+        if ext in {".png", ".jpg", ".jpeg", ".pdf"}:
             fig.write_image(save_path, scale=3)
         else:
             fig.write_html(save_path)
@@ -161,7 +183,7 @@ class MapMaker:
         if self.z_score:
             fig.update_coloraxes(cmid=0)
         ext = os.path.splitext(save_path)[1].lower()
-        if ext in {".png", ".jpg", ".jpeg"}:
+        if ext in {".png", ".jpg", ".jpeg", ".pdf"}:
             fig.write_image(save_path, scale=3)
         else:
             fig.write_html(save_path)
@@ -230,10 +252,20 @@ class MapMaker:
         if self.z_score:
             fig.update_coloraxes(cmid=0)
         ext = os.path.splitext(save_path)[1].lower()
-        if ext in {".png", ".jpg", ".jpeg"}:
+        if ext in {".png", ".jpg", ".jpeg", ".pdf"}:
             fig.write_image(save_path, scale=3)
         else:
             fig.write_html(save_path)
+
+    def _save_static_copy(self, save_path: str, writer: callable) -> None:
+        """Attempt to save a static image, warning if dependencies are missing."""
+        try:
+            writer(save_path)
+        except Exception as exc:
+            print(
+                f"Warning: Unable to save static map '{save_path}'. "
+                f"Install plotly kaleido for static exports. ({exc})"
+            )
 
     def make_maps(self, value_cols: Iterable[str]) -> None:
         """Generate and save maps for each specified numeric column.
@@ -246,8 +278,8 @@ class MapMaker:
             if self.map_type == "county":
                 if not self.fips_col:
                     raise ValueError("fips_col must be provided for county maps")
-                fname = f"county_map_{value_col}.html"
-                save_path = os.path.join(self.save_dir, fname)
+                base_name = f"county_map_{value_col}"
+                save_path = os.path.join(self.save_dir, f"{base_name}.html")
                 self._create_county_choropleth(
                     self.df,
                     self.fips_col,
@@ -255,11 +287,23 @@ class MapMaker:
                     title=f"County Map for {value_col}",
                     save_path=save_path,
                 )
+                for fmt in self.static_formats:
+                    static_path = os.path.join(self.save_dir, f"{base_name}.{fmt}")
+                    self._save_static_copy(
+                        static_path,
+                        lambda path=static_path: self._create_county_choropleth(
+                            self.df,
+                            self.fips_col,
+                            value_col,
+                            title=f"County Map for {value_col}",
+                            save_path=path,
+                        ),
+                    )
             elif self.map_type == "state":
                 if not self.state_col:
                     raise ValueError("state_col must be provided for state maps")
-                fname = f"state_map_{value_col}.html"
-                save_path = os.path.join(self.save_dir, fname)
+                base_name = f"state_map_{value_col}"
+                save_path = os.path.join(self.save_dir, f"{base_name}.html")
                 self._create_state_choropleth(
                     self.df,
                     self.state_col,
@@ -267,11 +311,23 @@ class MapMaker:
                     title=f"State Map for {value_col}",
                     save_path=save_path,
                 )
+                for fmt in self.static_formats:
+                    static_path = os.path.join(self.save_dir, f"{base_name}.{fmt}")
+                    self._save_static_copy(
+                        static_path,
+                        lambda path=static_path: self._create_state_choropleth(
+                            self.df,
+                            self.state_col,
+                            value_col,
+                            title=f"State Map for {value_col}",
+                            save_path=path,
+                        ),
+                    )
             elif self.map_type == "country":
                 if not self.country_col:
                     raise ValueError("country_col must be provided for country maps")
-                fname = f"country_map_{value_col}.html"
-                save_path = os.path.join(self.save_dir, fname)
+                base_name = f"country_map_{value_col}"
+                save_path = os.path.join(self.save_dir, f"{base_name}.html")
                 self._create_country_choropleth(
                     self.df,
                     self.country_col,
@@ -279,6 +335,18 @@ class MapMaker:
                     title=f"Country Map for {value_col}",
                     save_path=save_path,
                 )
+                for fmt in self.static_formats:
+                    static_path = os.path.join(self.save_dir, f"{base_name}.{fmt}")
+                    self._save_static_copy(
+                        static_path,
+                        lambda path=static_path: self._create_country_choropleth(
+                            self.df,
+                            self.country_col,
+                            value_col,
+                            title=f"Country Map for {value_col}",
+                            save_path=path,
+                        ),
+                    )
             else:
                 # should not happen due to validation in __init__
                 raise ValueError(f"Unsupported map type: {self.map_type}")

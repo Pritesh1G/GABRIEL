@@ -100,7 +100,7 @@ def _resolve_plot_save_path(
     expanded = os.path.expandvars(os.path.expanduser(str(save_path)))
     path = Path(expanded)
     fmt = _normalize_save_format(save_format)
-    suffix = f"_{batch_idx + 1:02d}" if total_batches > 1 else ""
+    suffix = f"_{batch_idx + 1}" if total_batches > 1 else ""
     if path.suffix:
         ext = fmt or path.suffix.lstrip(".")
         stem = path.stem + suffix
@@ -121,7 +121,7 @@ def _save_figure(
     save_format: Optional[str] = None,
     batch_idx: int = 0,
     total_batches: int = 1,
-    bbox_inches: Optional[str] = None,
+    bbox_inches: Optional[str] = "tight",
     dpi: Optional[int] = None,
     print_save_path: bool = True,
 ) -> Optional[Path]:
@@ -1095,7 +1095,7 @@ def regression_plot(
     show_plots: bool = True,
     save_path: Optional[Union[str, Path]] = None,
     save_format: Optional[str] = None,
-    bbox_inches: Optional[str] = None,
+    bbox_inches: Optional[str] = "tight",
     print_save_path: bool = True,
     tablefmt: str = "github",
     robust: bool = True,
@@ -1656,7 +1656,7 @@ def bar_plot(
     sort_mode: Optional[str] = "descending",
     save_path: Optional[Union[str, Path]] = None,
     save_format: Optional[str] = None,
-    bbox_inches: Optional[str] = None,
+    bbox_inches: Optional[str] = "tight",
     print_save_path: bool = True,
     vertical_bar_width: float = 0.92,
     horizontal_bar_height: float = 0.7,
@@ -2504,7 +2504,7 @@ def box_plot(
     print_summary: bool = True,
     save_path: Optional[Union[str, Path]] = None,
     save_format: Optional[str] = None,
-    bbox_inches: Optional[str] = None,
+    bbox_inches: Optional[str] = "tight",
     print_save_path: bool = True,
 ) -> Dict[str, Any]:
     """Render a high-DPI box plot that matches the house style.
@@ -2688,9 +2688,9 @@ def line_plot(
     legend_loc='best',
     alpha=1.0,
     max_lines_per_plot=8,               # batch panels if many series
-    save_path=None,                     # file or dir; batches get suffix _setN
+    save_path=None,                     # file or dir; batches get suffix _1, _2, ...
     save_format=None,                   # override extension (e.g., "png", "pdf")
-    bbox_inches=None,                   # pass through to fig.savefig
+    bbox_inches="tight",                # pass through to fig.savefig
     print_save_path=True,
     show=True,
 ):
