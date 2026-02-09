@@ -1897,7 +1897,7 @@ def bar_plot(
                     prefix=excess_prefix,
                 )
             resolved_columns = [replacements.get(col, col) for col in value_columns]
-            keep_columns = [category_column, *resolved_columns]
+            keep_columns = list(dict.fromkeys([category_column, *resolved_columns]))
             working_df = working_df[keep_columns].copy()
             for col in resolved_columns:
                 working_df[col] = pd.to_numeric(working_df[col], errors="coerce")
