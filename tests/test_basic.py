@@ -275,7 +275,9 @@ def test_get_response_background_poll(monkeypatch):
             self.responses = FakeResponses()
 
     fake_client = FakeClient()
-    monkeypatch.setattr(openai_utils, "_get_client", lambda base_url=None: fake_client)
+    monkeypatch.setattr(
+        openai_utils, "_get_client", lambda base_url=None, **kwargs: fake_client
+    )
 
     async def _runner():
         return await openai_utils.get_response(
@@ -327,7 +329,9 @@ def test_get_response_polls_only_when_needed(monkeypatch):
 
     fake_responses = FakeResponses()
     fake_client = type("FakeClient", (), {"responses": fake_responses})()
-    monkeypatch.setattr(openai_utils, "_get_client", lambda base_url=None: fake_client)
+    monkeypatch.setattr(
+        openai_utils, "_get_client", lambda base_url=None, **kwargs: fake_client
+    )
 
     texts, duration, raw = asyncio.run(
         openai_utils.get_response(
