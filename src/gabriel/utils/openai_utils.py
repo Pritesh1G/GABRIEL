@@ -238,9 +238,15 @@ class BackgroundTimeoutError(asyncio.TimeoutError):
 class JSONParseError(ValueError):
     """Raised when JSON parsing fails during JSON-mode requests."""
 
-    def __init__(self, message: str, snippet: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        snippet: Optional[str] = None,
+        parse_error: Optional[Exception] = None,
+    ):
         super().__init__(message)
         self.snippet = snippet
+        self.parse_error = parse_error
 
 
 def _extract_retry_after_seconds(error: Exception) -> Optional[float]:
@@ -5509,15 +5515,19 @@ async def get_all_responses(
                 )
                 if should_validate_json:
                     invalid_payloads = []
+                    invalid_errors = []
                     for resp in _coerce_to_list(resps):
-                        _, ok = parse_json_with_status(resp)
+                        _, ok, error = parse_json_with_status(resp)
                         if not ok:
                             invalid_payloads.append(resp)
+                            invalid_errors.append(error)
                     if invalid_payloads:
                         snippet = str(invalid_payloads[0])[:200]
+                        parse_error = invalid_errors[0] if invalid_errors else None
                         raise JSONParseError(
                             f"JSON parsing failed for identifier {ident}.",
                             snippet=snippet,
+                            parse_error=parse_error,
                         )
                 row = {
                     "Identifier": ident,
@@ -5730,6 +5740,11 @@ async def get_all_responses(
                 inflight.pop(ident, None)
                 status.num_other_errors += 1
                 error_detail = str(e).strip()
+                if e.parse_error is not None:
+                    error_detail = (
+                        f"{error_detail} Cause: {type(e.parse_error).__name__}: "
+                        f"{e.parse_error}"
+                    )
                 if e.snippet:
                     error_detail = f"{error_detail} Snippet: {e.snippet}"
                 logger.warning(f"JSON parse error for {ident}: {error_detail}")
