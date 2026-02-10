@@ -131,15 +131,13 @@ def safe_json(txt: Any) -> Union[dict, list]:
         return {}
 
 
-def parse_json_with_status(
-    txt: Any,
-) -> Tuple[Optional[Union[dict, list]], bool, Optional[Exception]]:
+def parse_json_with_status(txt: Any) -> Tuple[Optional[Union[dict, list]], bool]:
     """Parse JSON and report success separately from the parsed value."""
 
     try:
-        return _parse_json(txt), True, None
-    except Exception as exc:  # pragma: no cover - exercised via validation paths
-        return None, False, exc
+        return _parse_json(txt), True
+    except Exception:
+        return None, False
 
 
 async def safest_json(
