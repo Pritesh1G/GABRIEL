@@ -5715,12 +5715,17 @@ async def get_all_responses(
                     if error_detail:
                         base_message = f"{base_message}: {error_detail}"
                         error_logs[ident].append(error_detail)
+                    is_json_parse_error = "json parse" in detail_lower or "json parsing" in detail_lower
                     error_key: Hashable = (
                         "non-timeout-error",
                         type(e).__name__,
                         error_detail or None,
                     )
-                    if "connection error" not in detail_lower:
+                    if is_json_parse_error:
+                        status.num_json_parse_errors += 1
+                        json_parse_errors_since_last_status += 1
+                        _log_json_parse_once(error_detail or "JSON parse error")
+                    elif "connection error" not in detail_lower:
                         _emit_first_error(base_message, dedup_key=error_key)
                     else:
                         logger.debug(base_message)
