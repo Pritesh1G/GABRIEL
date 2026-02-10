@@ -205,6 +205,7 @@ class StatusTracker:
     num_connection_errors: int = 0
     num_api_errors: int = 0
     num_timeout_errors: int = 0
+    num_json_parse_errors: int = 0
     num_other_errors: int = 0
     time_of_last_rate_limit_error: float = 0.0
     time_of_last_connection_error: float = 0.0
@@ -4379,6 +4380,7 @@ async def get_all_responses(
     timeout_errors_since_last_status = 0
     rate_limit_errors_since_last_status = 0
     connection_errors_since_last_status = 0
+    json_parse_errors_since_last_status = 0
     first_timeout_logged = False
     first_rate_limit_logged = False
     first_connection_logged = False
@@ -4730,6 +4732,9 @@ async def get_all_responses(
             rate_limit_text += (
                 f" (+{rate_limit_errors_since_last_status} since last)"
             )
+        json_parse_text = f"json_parse_errors={status.num_json_parse_errors}/{denom}"
+        if status_report_interval is not None and json_parse_errors_since_last_status:
+            json_parse_text += f" (+{json_parse_errors_since_last_status} since last)"
         status_bits: List[str] = [
             f"cap={effective_cap}",
             f"active={active_workers}",
@@ -4737,6 +4742,7 @@ async def get_all_responses(
             f"queue={queue.qsize()}",
             f"processed={processed}/{status.num_tasks_started}",
             rate_limit_text,
+            json_parse_text,
         ]
         if ramp_up_enabled and not ramp_up_halted and effective_cap < concurrency_cap:
             status_bits.insert(1, f"ramp_target={concurrency_cap}")
@@ -5044,7 +5050,7 @@ async def get_all_responses(
         nonlocal max_parallel_ceiling, last_wait_adjust, current_tokens_per_call, timeout_errors_since_last_status
         nonlocal throughput_ceiling_ppm, observed_input_tokens_total, observed_output_tokens_total
         nonlocal observed_reasoning_tokens_total, observed_usage_count, connection_errors_since_adjust
-        nonlocal connection_errors_since_last_status
+        nonlocal connection_errors_since_last_status, json_parse_errors_since_last_status
         while True:
             if stop_event.is_set():
                 break
@@ -5728,14 +5734,15 @@ async def get_all_responses(
                         await flush()
             except JSONParseError as e:
                 inflight.pop(ident, None)
+                status.num_json_parse_errors += 1
                 status.num_other_errors += 1
                 error_detail = str(e).strip()
                 if e.snippet:
                     error_detail = f"{error_detail} Snippet: {e.snippet}"
-                logger.warning(f"JSON parse error for {ident}: {error_detail}")
+                json_parse_errors_since_last_status += 1
                 _emit_first_error(
                     f"JSON parse error encountered: {error_detail}",
-                    dedup_key=("json-parse-error", error_detail),
+                    dedup_key="json-parse-error",
                 )
                 error_logs[ident].append(error_detail)
                 if attempts_left - 1 > 0:
@@ -5886,6 +5893,7 @@ async def get_all_responses(
         try:
             nonlocal timeout_errors_since_last_status, connection_errors_since_last_status
             nonlocal rate_limit_errors_since_last_status
+            nonlocal json_parse_errors_since_last_status
             while not stop_event.is_set():
                 await asyncio.sleep(status_report_interval)
                 if stop_event.is_set() or processed >= status.num_tasks_started:
@@ -5896,6 +5904,7 @@ async def get_all_responses(
                 timeout_errors_since_last_status = 0
                 rate_limit_errors_since_last_status = 0
                 connection_errors_since_last_status = 0
+                json_parse_errors_since_last_status = 0
         except asyncio.CancelledError:
             pass
 
@@ -6068,6 +6077,10 @@ async def get_all_responses(
         logger.warning(f"{status.num_timeout_errors} timeouts encountered.")
     if status.num_api_errors > 0:
         logger.warning(f"{status.num_api_errors} API errors encountered.")
+    if status.num_json_parse_errors > 0:
+        logger.warning(
+            f"{status.num_json_parse_errors} JSON parse errors encountered."
+        )
     if status.num_other_errors > 0:
         logger.warning(f"{status.num_other_errors} unexpected errors encountered.")
     _report_cost()
