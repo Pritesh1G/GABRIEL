@@ -4384,6 +4384,7 @@ async def get_all_responses(
     first_timeout_logged = False
     first_rate_limit_logged = False
     first_connection_logged = False
+    first_json_parse_logged = False
     current_tokens_per_call = float(estimated_tokens_per_call)
     last_rate_limit_concurrency_change = 0.0
     restart_requested = False
@@ -4538,6 +4539,28 @@ async def get_all_responses(
                 logger.debug("Connection error: %s", detail)
             else:
                 logger.debug("Connection error encountered.")
+
+    def _log_json_parse_once(detail: Optional[str] = None) -> None:
+        nonlocal first_json_parse_logged
+        if not first_json_parse_logged:
+            if detail:
+                _emit_first_error(
+                    f"JSON parse error encountered: {detail}",
+                    dedup_key="json-parse-error",
+                )
+            msg = (
+                "Encountered first JSON parse error. Future JSON parse errors will be silenced and tracked in periodic updates."
+            )
+            if message_verbose:
+                print(msg)
+            else:
+                logger.warning(msg)
+            first_json_parse_logged = True
+        else:
+            if detail:
+                logger.debug("JSON parse error: %s", detail)
+            else:
+                logger.debug("JSON parse error encountered.")
 
     def _halt_ramp_up(reason: str) -> None:
         nonlocal ramp_up_halted, concurrency_cap
@@ -5699,7 +5722,6 @@ async def get_all_responses(
                     )
                     if "connection error" not in detail_lower:
                         _emit_first_error(base_message, dedup_key=error_key)
-                        logger.warning(base_message)
                     else:
                         logger.debug(base_message)
                     if attempts_left - 1 > 0:
@@ -5740,10 +5762,7 @@ async def get_all_responses(
                 if e.snippet:
                     error_detail = f"{error_detail} Snippet: {e.snippet}"
                 json_parse_errors_since_last_status += 1
-                _emit_first_error(
-                    f"JSON parse error encountered: {error_detail}",
-                    dedup_key="json-parse-error",
-                )
+                _log_json_parse_once(error_detail)
                 error_logs[ident].append(error_detail)
                 if attempts_left - 1 > 0:
                     backoff = random.uniform(1, 2) * (2 ** (max_retries - attempts_left))
