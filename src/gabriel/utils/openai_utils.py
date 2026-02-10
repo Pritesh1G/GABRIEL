@@ -121,7 +121,7 @@ except Exception:
 from gabriel.utils.parsing import parse_json_with_status, safe_json
 
 # single connection pool per process, keyed by base URL and created lazily
-_clients_async: Dict[Tuple[Optional[str], Optional[int], Optional[int]], openai.AsyncOpenAI] = {}
+_clients_async: Dict[Optional[str], openai.AsyncOpenAI] = {}
 
 
 def _progress_bar(*args: Any, verbose: bool = True, **kwargs: Any):
@@ -144,9 +144,6 @@ def _display_example_prompt(example_prompt: str, *, verbose: bool = True) -> Non
 
 def _get_client(
     base_url: Optional[str] = None,
-    *,
-    httpx_max_connections: Optional[int] = None,
-    httpx_max_keepalive_connections: Optional[int] = None,
 ) -> openai.AsyncOpenAI:
     """Return a cached ``AsyncOpenAI`` client for ``base_url``.
 
@@ -156,30 +153,22 @@ def _get_client(
     """
 
     url = base_url or os.getenv("OPENAI_BASE_URL")
-    key = (url, httpx_max_connections, httpx_max_keepalive_connections)
-    client = _clients_async.get(key)
+    client = _clients_async.get(url)
     if client is None:
         kwargs: Dict[str, Any] = {}
         if url:
             kwargs["base_url"] = url
         if httpx is not None:
-            timeout: Optional[httpx.Timeout] = None
             try:
-                timeout = httpx.Timeout(connect=10.0, read=None, write=None, pool=None)
+                kwargs.setdefault(
+                    "timeout",
+                    httpx.Timeout(connect=10.0, read=None, write=None, pool=None),
+                )
             except Exception:
                 # Fall back to the SDK default if constructing the timeout fails
-                timeout = None
-            if httpx_max_connections or httpx_max_keepalive_connections:
-                limits = httpx.Limits(
-                    max_connections=httpx_max_connections,
-                    max_keepalive_connections=httpx_max_keepalive_connections,
-                )
-                http_client = httpx.AsyncClient(limits=limits, timeout=timeout)
-                kwargs["http_client"] = http_client
-            elif timeout is not None:
-                kwargs.setdefault("timeout", timeout)
+                pass
         client = openai.AsyncOpenAI(**kwargs)
-        _clients_async[key] = client
+        _clients_async[url] = client
     return client
 
 # Estimated output tokens per prompt used for cost estimation when no cutoff is specified.
@@ -1707,8 +1696,6 @@ async def get_response(
     logging_level: Optional[Union[str, int]] = None,
     background_mode: Optional[bool] = None,
     background_poll_interval: float = 10.0,
-    httpx_max_connections: Optional[int] = None,
-    httpx_max_keepalive_connections: Optional[int] = None,
     **kwargs: Any,
 ):
     """Request one or more model completions from the OpenAI API.
@@ -1787,8 +1774,6 @@ async def get_response(
         How frequently (in seconds) to poll for background completion when
         background mode is active. Defaults to 10 seconds and automatically
         lengthens when rate-limit responses instruct a longer pause.
-    httpx_max_connections, httpx_max_keepalive_connections:
-        Optional HTTPX connection limits to apply to the shared client.
     **kwargs:
         Any additional parameters understood by the OpenAI SDK are forwarded
         transparently.
@@ -1819,11 +1804,7 @@ async def get_response(
         set_log_level(logging_level)
     _require_api_key()
     base_url = base_url or os.getenv("OPENAI_BASE_URL")
-    client_async = _get_client(
-        base_url,
-        httpx_max_connections=httpx_max_connections,
-        httpx_max_keepalive_connections=httpx_max_keepalive_connections,
-    )
+    client_async = _get_client(base_url)
 
     try:
         poll_interval = float(background_poll_interval)
@@ -3025,8 +3006,6 @@ async def get_all_responses(
     n_parallels: int = 650,
     ramp_up_seconds: float = 15.0,
     ramp_up_start_fraction: float = 0.2,
-    httpx_max_connections: Optional[int] = None,
-    httpx_max_keepalive_connections: Optional[int] = None,
     max_retries: int = 3,
     timeout_factor: float = 2.5,
     max_timeout: Optional[float] = None,
@@ -3094,11 +3073,6 @@ async def get_all_responses(
     again so brief spikes do not trigger runaway
     throttling, while successful calls reset the counters and allow the pool to
     scale back up.
-
-    The shared HTTPX client can be tuned via ``httpx_max_connections`` and
-    ``httpx_max_keepalive_connections``. When omitted, the helper leaves the
-    OpenAI SDK defaults intact; pass explicit values if you want to override
-    the connection pool size.
 
     Connection errors (e.g., transient network drops, Wi‑Fi/VPN instability, or bandwidth limitations)
     are handled similarly: the helper tracks recent connection failures over
@@ -3430,11 +3404,6 @@ async def get_all_responses(
     status = StatusTracker()
     requested_n_parallels = max(1, n_parallels)
     user_requested_n_parallels = requested_n_parallels
-    if httpx_max_connections is not None or httpx_max_keepalive_connections is not None:
-        if httpx_max_connections is None:
-            httpx_max_connections = httpx_max_keepalive_connections
-        if httpx_max_keepalive_connections is None:
-            httpx_max_keepalive_connections = httpx_max_connections
     tokenizer = _get_tokenizer(model)
     # Backwards compatibility for identifiers
     if identifiers is None:
@@ -3454,10 +3423,6 @@ async def get_all_responses(
     # Pass the chosen model through to get_response by default
     get_response_kwargs.setdefault("model", model)
     get_response_kwargs.setdefault("base_url", base_url)
-    get_response_kwargs.setdefault("httpx_max_connections", httpx_max_connections)
-    get_response_kwargs.setdefault(
-        "httpx_max_keepalive_connections", httpx_max_keepalive_connections
-    )
     if background_mode is not None:
         get_response_kwargs.setdefault("background_mode", background_mode)
     get_response_kwargs.setdefault("background_poll_interval", background_poll_interval)
