@@ -3521,11 +3521,24 @@ async def get_all_responses(
                 df[col] = pd.NA
         if reasoning_summary is None and "Reasoning Summary" in df.columns:
             df = df.drop(columns=["Reasoning Summary"])
-        # Only skip identifiers that previously succeeded so failures can be retried
+        # Only skip identifiers that previously succeeded so failures can be retried.
+        # Older/hand-edited checkpoints can persist booleans as strings ("True",
+        # "true", "1", etc.). Normalize those values so resume works reliably.
         if "Successful" in df.columns:
-            done = set(df.loc[df["Successful"] == True, "Identifier"])
+            success_raw = df["Successful"]
+            success_mask = pd.Series(False, index=df.index)
+            with contextlib.suppress(Exception):
+                success_mask = success_mask | success_raw.astype("boolean").fillna(False)
+            string_mask = (
+                success_raw.astype(str)
+                .str.strip()
+                .str.lower()
+                .isin({"true", "1", "yes", "y", "completed", "succeeded", "success"})
+            )
+            success_mask = success_mask | string_mask
+            done = set(df.loc[success_mask, "Identifier"].astype(str))
         else:
-            done = set(df["Identifier"])
+            done = set(df["Identifier"].astype(str))
         if message_verbose:
             print(f"Loaded {len(df):,} rows; {len(done):,} already marked complete.")
     else:
@@ -3545,7 +3558,7 @@ async def get_all_responses(
             cols.insert(7, "Reasoning Summary")
         df = pd.DataFrame(columns=cols)
         done = set()
-    written_identifiers: Set[Any] = set(df["Identifier"]) if not df.empty else set()
+    written_identifiers: Set[str] = set(df["Identifier"].astype(str)) if not df.empty else set()
     # Helper to calculate and report final run cost
     def _report_cost() -> None:
         nonlocal df
@@ -3574,7 +3587,7 @@ async def get_all_responses(
             print(msg)
         logger.info(msg)
     # Filter prompts/identifiers based on what is already completed
-    todo_pairs = [(p, i) for p, i in zip(prompts, identifiers) if i not in done]
+    todo_pairs = [(p, i) for p, i in zip(prompts, identifiers) if str(i) not in done]
     if not todo_pairs:
         _report_cost()
         return df
@@ -3838,7 +3851,7 @@ async def get_all_responses(
             batch_df = pd.DataFrame(rows)
             if "Web Search Sources" not in batch_df.columns:
                 batch_df["Web Search Sources"] = pd.NA
-            batch_df = batch_df[~batch_df["Identifier"].isin(written_identifiers)]
+            batch_df = batch_df[~batch_df["Identifier"].astype(str).isin(written_identifiers)]
             if batch_df.empty:
                 return
             to_save = batch_df.copy()
@@ -3857,7 +3870,7 @@ async def get_all_responses(
                 df = batch_df.reset_index(drop=True)
             else:
                 df = pd.concat([df, batch_df], ignore_index=True)
-            written_identifiers.update(batch_df["Identifier"])
+            written_identifiers.update(batch_df["Identifier"].astype(str))
 
         client = _get_client(base_url)
         # Load existing state
@@ -4898,7 +4911,7 @@ async def get_all_responses(
             batch_df = pd.DataFrame(results)
             if "Web Search Sources" not in batch_df.columns:
                 batch_df["Web Search Sources"] = pd.NA
-            batch_df = batch_df[~batch_df["Identifier"].isin(written_identifiers)]
+            batch_df = batch_df[~batch_df["Identifier"].astype(str).isin(written_identifiers)]
             if not batch_df.empty:
                 to_save = batch_df.copy()
                 for col in ("Response", "Error Log", "Web Search Sources"):
@@ -4916,7 +4929,7 @@ async def get_all_responses(
                     df = batch_df.reset_index(drop=True)
                 else:
                     df = pd.concat([df, batch_df], ignore_index=True)
-                written_identifiers.update(batch_df["Identifier"])
+                written_identifiers.update(batch_df["Identifier"].astype(str))
             results = []
         if logger.isEnabledFor(logging.INFO) and processed:
             logger.info(
