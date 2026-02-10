@@ -3096,9 +3096,9 @@ async def get_all_responses(
     scale back up.
 
     The shared HTTPX client can be tuned via ``httpx_max_connections`` and
-    ``httpx_max_keepalive_connections``.  When not supplied, the helper derives
-    a default limit from the requested ``n_parallels`` so that the connection
-    pool can accommodate the full worker ceiling.
+    ``httpx_max_keepalive_connections``. When omitted, the helper leaves the
+    OpenAI SDK defaults intact; pass explicit values if you want to override
+    the connection pool size.
 
     Connection errors (e.g., transient network drops, Wi‑Fi/VPN instability, or bandwidth limitations)
     are handled similarly: the helper tracks recent connection failures over
@@ -3430,10 +3430,11 @@ async def get_all_responses(
     status = StatusTracker()
     requested_n_parallels = max(1, n_parallels)
     user_requested_n_parallels = requested_n_parallels
-    if httpx_max_connections is None:
-        httpx_max_connections = int(math.ceil(requested_n_parallels * 1.5))
-    if httpx_max_keepalive_connections is None:
-        httpx_max_keepalive_connections = httpx_max_connections
+    if httpx_max_connections is not None or httpx_max_keepalive_connections is not None:
+        if httpx_max_connections is None:
+            httpx_max_connections = httpx_max_keepalive_connections
+        if httpx_max_keepalive_connections is None:
+            httpx_max_keepalive_connections = httpx_max_connections
     tokenizer = _get_tokenizer(model)
     # Backwards compatibility for identifiers
     if identifiers is None:
