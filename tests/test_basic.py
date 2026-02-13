@@ -1707,3 +1707,84 @@ def test_paraphrase_approval_column_recursive(monkeypatch, tmp_path):
 
     assert df["txt_revised"].tolist() == ["approved 0", "approved 1"]
     assert df["txt_revised_approved"].tolist() == [True, False]
+
+
+def test_rank_pdf_round_and_catchup_forward_prompt_pdfs(monkeypatch, tmp_path):
+    calls = []
+
+    async def fake_get_all_responses(*, prompts, identifiers, **kwargs):
+        calls.append(dict(kwargs))
+        return pd.DataFrame(
+            {
+                "Identifier": identifiers,
+                "Response": ['{"clarity": "circle"}'] * len(identifiers),
+            }
+        )
+
+    monkeypatch.setattr("gabriel.tasks.rank.get_all_responses", fake_get_all_responses)
+
+    cfg = RankConfig(
+        attributes={"clarity": ""},
+        save_dir=str(tmp_path),
+        file_name="rankings.csv",
+        modality="pdf",
+        n_rounds=1,
+        matches_per_round=1,
+        n_parallels=4,
+        initial_rating_pass=False,
+    )
+    task = Rank(cfg)
+
+    initial = pd.DataFrame(
+        {
+            "pdf": [
+                "data:application/pdf;base64,AAAA",
+                "data:application/pdf;base64,BBBB",
+            ]
+        }
+    )
+    first = asyncio.run(task.run(initial, column_name="pdf", reset_files=True))
+    assert "clarity" in first.columns
+
+    expanded = pd.DataFrame(
+        {
+            "pdf": [
+                "data:application/pdf;base64,AAAA",
+                "data:application/pdf;base64,BBBB",
+                "data:application/pdf;base64,CCCC",
+            ]
+        }
+    )
+    second = asyncio.run(task.run(expanded, column_name="pdf", reset_files=False))
+
+    assert len(second) == 3
+    assert any(call.get("prompt_pdfs") for call in calls)
+
+
+def test_rank_resume_ignores_nan_batch_rows(tmp_path):
+    cfg = RankConfig(
+        attributes={"clarity": ""},
+        save_dir=str(tmp_path),
+        file_name="rankings.csv",
+        use_dummy=True,
+        n_rounds=2,
+        matches_per_round=1,
+        n_parallels=4,
+    )
+    round0 = tmp_path / "rankings_round0.csv"
+    pd.DataFrame(
+        {
+            "Identifier": ["x"],
+            "Response": ["{}"],
+            "Batch": [np.nan],
+            "IdA": ["a"],
+            "IdB": ["b"],
+        }
+    ).to_csv(round0, index=False)
+
+    task = Rank(cfg)
+    data = pd.DataFrame({"text": ["first", "second"]})
+    df = asyncio.run(task.run(data, column_name="text", reset_files=False))
+
+    assert "clarity" in df.columns
+    assert len(df) == 2

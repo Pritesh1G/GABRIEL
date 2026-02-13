@@ -826,6 +826,7 @@ class Rank:
         texts_by_id: Dict[str, str],
         images_by_id: Dict[str, List[str]],
         audio_by_id: Dict[str, List[Dict[str, str]]],
+        pdfs_by_id: Dict[str, List[Dict[str, str]]],
         attr_batches: List[List[str]],
         attr_keys: List[str],
         history_pairs: Dict[str, List[Tuple[str, str]]],
@@ -880,7 +881,6 @@ class Rank:
             ids: List[str] = []
             pair_images: Dict[str, List[str]] = {}
             pair_audio: Dict[str, List[Dict[str, str]]] = {}
-            pair_pdfs: Dict[str, List[Dict[str, str]]] = {}
             pair_pdfs: Dict[str, List[Dict[str, str]]] = {}
             meta_map: Dict[str, Tuple[int, int, str, str]] = {}
             id_to_circle_first: Dict[str, bool] = {}
@@ -1681,7 +1681,14 @@ class Rank:
                         df_round["IdB"],
                         df_round["Response"],
                     ):
-                        batch_idx = int(batch_idx_raw)
+                        if pd.isna(batch_idx_raw):
+                            continue
+                        try:
+                            batch_idx = int(batch_idx_raw)
+                        except (TypeError, ValueError):
+                            continue
+                        if batch_idx < 0 or batch_idx >= len(attr_batches):
+                            continue
                         batch = attr_batches[batch_idx]
                         batch_attr_map = {str(k).strip().lower(): k for k in batch}
                         safe_obj = await _coerce_dict_replay(resp_raw)
@@ -1716,7 +1723,12 @@ class Rank:
                         if len(parts) != 5:
                             continue
                         _, batch_idx_str, _, id_a, id_b = parts
-                        batch_idx = int(batch_idx_str)
+                        try:
+                            batch_idx = int(batch_idx_str)
+                        except (TypeError, ValueError):
+                            continue
+                        if batch_idx < 0 or batch_idx >= len(attr_batches):
+                            continue
                         batch = attr_batches[batch_idx]
                         batch_attr_map = {str(k).strip().lower(): k for k in batch}
                         safe_obj = await _coerce_dict_replay(resp_raw)
@@ -1800,6 +1812,7 @@ class Rank:
             texts_by_id=texts_by_id,
             images_by_id=images_by_id,
             audio_by_id=audio_by_id,
+            pdfs_by_id=pdfs_by_id,
             attr_batches=attr_batches,
             attr_keys=attr_keys,
             history_pairs=history_pairs,
@@ -1838,6 +1851,7 @@ class Rank:
             ids: List[str] = []
             pair_images: Dict[str, List[str]] = {}
             pair_audio: Dict[str, List[Dict[str, str]]] = {}
+            pair_pdfs: Dict[str, List[Dict[str, str]]] = {}
             meta_map: Dict[str, Tuple[int, int, str, str]] = {}
             id_to_circle_first: Dict[str, bool] = {}
             for batch_idx, batch in enumerate(attr_batches):
@@ -1900,6 +1914,22 @@ class Rank:
                                 auds.extend(aa)
                         if auds:
                             pair_audio[sha8] = auds
+                    if pdfs_by_id:
+                        pdfs: List[Dict[str, str]] = []
+                        pa = pdfs_by_id.get(id_a, [])
+                        pb = pdfs_by_id.get(id_b, [])
+                        if circle_first_flag:
+                            if pa:
+                                pdfs.extend(pa)
+                            if pb:
+                                pdfs.extend(pb)
+                        else:
+                            if pb:
+                                pdfs.extend(pb)
+                            if pa:
+                                pdfs.extend(pa)
+                        if pdfs:
+                            pair_pdfs[sha8] = pdfs
             # obtain responses from the language model for this round
             round_path = os.path.join(self.cfg.save_dir, f"{base_name}_round{rnd}.csv")
             resp_df = await get_all_responses(
@@ -1907,6 +1937,7 @@ class Rank:
                 identifiers=ids,
                 prompt_images=pair_images or None,
                 prompt_audio=pair_audio or None,
+                prompt_pdfs=pair_pdfs or None,
                 n_parallels=self.cfg.n_parallels,
                 model=self.cfg.model,
                 json_mode=self.cfg.modality != "audio",
