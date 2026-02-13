@@ -964,6 +964,47 @@ def test_rank_outputs_standard_errors(tmp_path):
     assert np.isfinite(df["clarity_se"].fillna(0.0)).all()
 
 
+def test_rank_drops_malformed_rows_in_text_mode(tmp_path, capsys):
+    cfg = RankConfig(
+        attributes={"clarity": ""},
+        save_dir=str(tmp_path),
+        file_name="rankings.csv",
+        use_dummy=True,
+        n_rounds=1,
+        matches_per_round=1,
+        n_parallels=4,
+    )
+    task = Rank(cfg)
+    data = pd.DataFrame({"text": ["good", 3.14, None, "great"]})
+    df = asyncio.run(task.run(data, column_name="text"))
+    captured = capsys.readouterr().out
+    assert "Dropping 2/4 rows" in captured
+    assert len(df) == 2
+    assert set(df["text"]) == {"good", "great"}
+
+
+def test_recursive_rank_drops_malformed_rows_in_text_mode(tmp_path, capsys):
+    cfg = RankConfig(
+        attributes={"clarity": ""},
+        save_dir=str(tmp_path),
+        file_name="rankings.csv",
+        use_dummy=True,
+        recursive=True,
+        recursive_fraction=0.5,
+        recursive_min_remaining=1,
+        recursive_rate_first_round=False,
+        n_rounds=1,
+        matches_per_round=1,
+        n_parallels=4,
+    )
+    task = Rank(cfg)
+    data = pd.DataFrame({"text": ["alpha", float("nan"), "beta"]})
+    df = asyncio.run(task.run(data, column_name="text"))
+    captured = capsys.readouterr().out
+    assert "Dropping 1/3 rows" in captured
+    assert set(df["text"]) == {"alpha", "beta"}
+
+
 def test_rank_primer_centering():
     cfg = RankConfig(attributes={"clarity": ""})
     task = Rank(cfg)
