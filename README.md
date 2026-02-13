@@ -6,7 +6,7 @@
 
 You can install the GABRIEL Python library from [PyPI](https://pypi.org/project/openai-gabriel/) with `pip install openai-gabriel` and then `import gabriel`.
 
-Read our blog post [here](https://openai.com/index/scaling-social-science-research/), our paper with validation experiments and applied examples here, and submit feedback / bugs / feature requests [here](https://forms.gle/RKnBskuiZ64Wt9D66).
+Read our blog post [here](https://openai.com/index/scaling-social-science-research/), our paper with validation experiments and applied examples [here](http://www.nber.org/papers/w34834), and submit feedback / bugs / feature requests [here](https://forms.gle/RKnBskuiZ64Wt9D66).
 
 ## Table of contents
 
