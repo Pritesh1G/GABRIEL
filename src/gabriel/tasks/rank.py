@@ -72,6 +72,33 @@ from .rate import Rate, RateConfig
 from ._attribute_utils import load_persisted_attributes
 
 
+def _is_missing_scalar(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        result = pd.isna(value)
+    except Exception:
+        return False
+    return bool(result) if isinstance(result, (bool, np.bool_)) else False
+
+
+def _hash_text_identifier(value: Any, *, strict: bool) -> Optional[str]:
+    if _is_missing_scalar(value):
+        return None
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="ignore")
+    elif isinstance(value, str):
+        text = value
+    elif strict:
+        return None
+    else:
+        text = str(value)
+    text = text.strip()
+    if not text:
+        return None
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+
+
 @dataclass
 class RankConfig:
     """User‑visible configuration for :class:`Rank`.
@@ -409,9 +436,10 @@ class Rank:
         if id_column and id_column in rate_df.columns:
             key_series = rate_df[id_column].astype(str)
         elif text_column in rate_df.columns:
-            key_series = rate_df[text_column].astype(str).map(
-                lambda x: hashlib.sha1(x.encode()).hexdigest()[:8]
+            key_series = rate_df[text_column].map(
+                lambda x: _hash_text_identifier(x, strict=True)
             )
+            key_series = key_series.dropna()
         else:
             return {}
         stage_df = pd.DataFrame({"_id": key_series})
@@ -1099,14 +1127,34 @@ class Rank:
             raise ValueError("recursive_cut_side must be 'top' or 'bottom'")
 
         work_df = df.reset_index(drop=True).copy()
+        strict_text_mode = self.cfg.modality in {"text", "entity", "web"}
         if id_column is not None:
             if id_column not in work_df.columns:
                 raise ValueError(f"id_column '{id_column}' not found in DataFrame")
+            valid_mask = ~work_df[id_column].map(_is_missing_scalar)
+            dropped = int((~valid_mask).sum())
+            if dropped > 0:
+                total = len(work_df)
+                pct = (dropped / total * 100.0) if total else 0.0
+                print(
+                    f"[Rank] Dropping {dropped}/{total} rows ({pct:.1f}%) with malformed '{id_column}' values in recursive mode."
+                )
+            work_df = work_df.loc[valid_mask].copy().reset_index(drop=True)
             work_df["identifier"] = work_df[id_column].astype(str)
         else:
-            work_df["identifier"] = work_df[text_column].astype(str).map(
-                lambda x: hashlib.sha1(x.encode()).hexdigest()[:8]
+            hashed = work_df[text_column].map(
+                lambda x: _hash_text_identifier(x, strict=strict_text_mode)
             )
+            valid_mask = hashed.notna()
+            dropped = int((~valid_mask).sum())
+            if dropped > 0:
+                total = len(work_df)
+                pct = (dropped / total * 100.0) if total else 0.0
+                print(
+                    f"[Rank] Dropping {dropped}/{total} rows ({pct:.1f}%) with malformed '{text_column}' values in recursive mode."
+                )
+            work_df = work_df.loc[valid_mask].copy().reset_index(drop=True)
+            work_df["identifier"] = hashed.loc[valid_mask].astype(str).reset_index(drop=True)
         if text_column != "text":
             work_df = work_df.rename(columns={text_column: "text"})
         rewrite_col = self.cfg.recursive_rewrite_text_col or "text"
@@ -1114,9 +1162,20 @@ class Rank:
             work_df[rewrite_col] = work_df["text"]
         work_df["identifier"] = work_df["identifier"].astype(str)
 
-        original_cols = list(df.columns)
-        original_df = df.reset_index(drop=True).copy()
-        original_df["identifier"] = work_df["identifier"]
+        if work_df.empty:
+            empty_out = work_df[[c for c in df.columns if c in work_df.columns]].copy()
+            for attr in attr_list:
+                empty_out[attr] = pd.Series(dtype="float64")
+                empty_out[f"{attr}_raw"] = pd.Series(dtype="float64")
+                empty_out[f"{attr}_se"] = pd.Series(dtype="float64")
+            empty_out["overall_rank"] = pd.Series(dtype="float64")
+            empty_out["exit_stage"] = pd.Series(dtype="float64")
+            final_file = os.path.join(self.cfg.save_dir, f"{self.cfg.file_name}_recursive_final.csv")
+            empty_out.to_csv(final_file, index=False)
+            return empty_out
+
+        original_cols = [c for c in df.columns if c in work_df.columns]
+        original_df = work_df[original_cols + ["identifier"]].copy()
         latest_text: Dict[str, str] = {
             ident: txt for ident, txt in zip(work_df["identifier"], work_df["text"])
         }
@@ -1435,17 +1494,47 @@ class Rank:
 
         df_proc = df.reset_index(drop=True).copy()
         warn_if_modality_mismatch(df_proc[column_name].tolist(), self.cfg.modality, column_name=column_name)
+        strict_text_mode = self.cfg.modality in {"text", "entity", "web"}
         if id_column is not None:
             if id_column not in df_proc.columns:
                 raise ValueError(f"id_column '{id_column}' not found in DataFrame")
+            valid_mask = ~df_proc[id_column].map(_is_missing_scalar)
+            dropped = int((~valid_mask).sum())
+            if dropped > 0:
+                total = len(df_proc)
+                pct = (dropped / total * 100.0) if total else 0.0
+                print(
+                    f"[Rank] Dropping {dropped}/{total} rows ({pct:.1f}%) with malformed '{id_column}' values."
+                )
+            df_proc = df_proc.loc[valid_mask].copy().reset_index(drop=True)
             df_proc["_id"] = df_proc[id_column].astype(str)
         else:
-            # assign a stable identifier per row using an sha1 hash
-            df_proc["_id"] = (
-                df_proc[column_name]
-                .astype(str)
-                .map(lambda x: hashlib.sha1(x.encode()).hexdigest()[:8])
+            hashed_ids = df_proc[column_name].map(
+                lambda x: _hash_text_identifier(x, strict=strict_text_mode)
             )
+            valid_mask = hashed_ids.notna()
+            dropped = int((~valid_mask).sum())
+            if dropped > 0:
+                total = len(df_proc)
+                pct = (dropped / total * 100.0) if total else 0.0
+                print(
+                    f"[Rank] Dropping {dropped}/{total} rows ({pct:.1f}%) with malformed '{column_name}' values before ranking."
+                )
+            df_proc = df_proc.loc[valid_mask].copy().reset_index(drop=True)
+            df_proc["_id"] = hashed_ids.loc[valid_mask].astype(str).reset_index(drop=True)
+
+        if df_proc.empty:
+            if isinstance(self.cfg.attributes, dict):
+                attr_keys_empty = list(self.cfg.attributes.keys())
+            else:
+                attr_keys_empty = list(self.cfg.attributes)
+            df_out = df_proc[[c for c in df.columns if c in df_proc.columns]].copy()
+            for attr in attr_keys_empty:
+                df_out[attr] = pd.Series(dtype="float64")
+                df_out[f"{attr}_raw"] = pd.Series(dtype="float64")
+                df_out[f"{attr}_se"] = pd.Series(dtype="float64")
+            df_out.to_csv(final_path, index=False)
+            return df_out
         # Determine how many rounds have already been processed when
         # `reset_files` is False.  We look for files named
         # ``<base_name>_round<k>.csv`` to infer progress.  If a final
@@ -1491,8 +1580,9 @@ class Rank:
                     else:
                         final_ids = set(
                             final_df[identifier_col]
+                            .map(lambda x: _hash_text_identifier(x, strict=True))
+                            .dropna()
                             .astype(str)
-                            .map(lambda x: hashlib.sha1(x.encode()).hexdigest()[:8])
                         )
                     if last_completed >= self.cfg.n_rounds - 1 and set(df_proc["_id"]) <= final_ids:
                         return final_df
